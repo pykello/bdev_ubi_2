@@ -147,7 +147,12 @@ static void ubi_bs_init_complete(void *cb_arg, struct spdk_blob_store *bs, int b
     }
 
     context->ubi_bdev->blobstore = bs;
-    spdk_bs_create_blob(bs, ubi_blob_create_complete, context);
+
+    spdk_blob_opts_init(&context->blob_opts, sizeof(context->blob_opts));
+    context->blob_opts.thin_provision = true;
+    context->blob_opts.num_clusters = spdk_bs_total_data_cluster_count(bs);
+
+    spdk_bs_create_blob_ext(bs, &context->blob_opts, ubi_blob_create_complete, context);
 }
 
 /*

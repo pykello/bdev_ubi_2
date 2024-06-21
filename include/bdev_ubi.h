@@ -1,6 +1,7 @@
 #ifndef SPDK_BDEV_NULL_H
 #define SPDK_BDEV_NULL_H
 
+#include "spdk/blob.h"
 #include "spdk/stdinc.h"
 
 #define DEFAULT_STRIPE_SIZE_KB 1024
@@ -29,6 +30,8 @@ struct ubi_create_context {
 
     struct ubi_bdev *ubi_bdev;
     bool registerd;
+
+    struct spdk_blob_opts blob_opts;
 
     /* temporary channel used to read metadata */
     struct spdk_io_channel *base_ch;

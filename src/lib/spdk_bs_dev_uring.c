@@ -22,8 +22,7 @@ void bs_dev_uring_poll(struct spdk_io_channel *channel) {
     struct bs_dev_uring_io_channel *ch = spdk_io_channel_get_ctx(channel);
     struct io_uring *ring = &ch->image_file_ring;
     struct io_uring_cqe *cqe;
-    
-    
+
     int ret = io_uring_peek_cqe(ring, &cqe);
     if (ret == -EAGAIN) {
         return;
