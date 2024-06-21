@@ -19,6 +19,8 @@ int ubi_create_channel_cb(void *io_device, void *ctx_buf) {
     struct ubi_bdev *ubi_bdev = io_device;
     struct ubi_io_channel *ch = ctx_buf;
 
+    SPDK_WARNLOG("Creating I/O channel for %s\n", ubi_bdev->bdev.name);
+
     ch->ubi_bdev = ubi_bdev;
     TAILQ_INIT(&ch->io);
     ch->poller = SPDK_POLLER_REGISTER(ubi_io_poll, ch, 0);
@@ -37,6 +39,7 @@ int ubi_create_channel_cb(void *io_device, void *ctx_buf) {
  */
 void ubi_destroy_channel_cb(void *io_device, void *ctx_buf) {
     struct ubi_io_channel *ch = ctx_buf;
+    SPDK_WARNLOG("Destroying I/O channel for %s\n", ch->ubi_bdev->bdev.name);
     spdk_poller_unregister(&ch->poller);
 
     spdk_bs_free_io_channel(ch->bs_channel);
@@ -47,7 +50,10 @@ void ubi_destroy_channel_cb(void *io_device, void *ctx_buf) {
  */
 static int ubi_io_poll(void *arg) {
     struct ubi_io_channel *ch = arg;
-    bs_dev_uring_poll(ch->bs_channel);
+    struct ubi_bdev *ubi_bdev = ch->ubi_bdev;
+
+    struct spdk_io_channel *uring_ch = spdk_io_channel_from_ctx(ubi_bdev->parent_bs_dev);
+    bs_dev_uring_poll(uring_ch);
 
     return SPDK_POLLER_BUSY;
 }
