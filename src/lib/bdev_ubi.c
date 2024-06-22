@@ -71,8 +71,6 @@ static int ubi_get_ctx_size(void) { return sizeof(struct ubi_bdev_io); }
 static void ubi_blob_set_parent_complete(void *arg1, int bserrno) {
     struct ubi_create_context *context = arg1;
 
-    SPDK_WARNLOG("ubi_blob_set_parent_complete\n");
-
     if (bserrno) {
         UBI_ERRLOG(context->ubi_bdev, "Could not set parent for blob: %s\n",
                    spdk_strerror(-bserrno));
@@ -85,8 +83,6 @@ static void ubi_blob_set_parent_complete(void *arg1, int bserrno) {
 
 static void ubi_blob_resize_complete(void *arg1, int bserrno) {
     struct ubi_create_context *context = arg1;
-
-    SPDK_WARNLOG("ubi_blob_resize_complete\n");
 
     if (bserrno) {
         UBI_ERRLOG(context->ubi_bdev, "Could not resize blob: %s\n",
@@ -113,8 +109,6 @@ static void ubi_blob_resize_complete(void *arg1, int bserrno) {
 static void ubi_blob_open_complete(void *arg1, struct spdk_blob *blob, int bserrno) {
     struct ubi_create_context *context = arg1;
 
-    SPDK_WARNLOG("ubi_blob_open_complete\n");
-
     if (bserrno) {
         UBI_ERRLOG(context->ubi_bdev, "Could not open blob: %s\n",
                    spdk_strerror(-bserrno));
@@ -131,8 +125,6 @@ static void ubi_blob_open_complete(void *arg1, struct spdk_blob *blob, int bserr
 static void ubi_blob_create_complete(void *arg1, spdk_blob_id blobid, int bserrno) {
     struct ubi_create_context *context = arg1;
 
-    SPDK_WARNLOG("ubi_blob_create_complete\n");
-
     if (bserrno) {
         UBI_ERRLOG(context->ubi_bdev, "Could not create blob: %s\n",
                    spdk_strerror(-bserrno));
@@ -148,8 +140,6 @@ static void ubi_blob_create_complete(void *arg1, spdk_blob_id blobid, int bserrn
 
 static void ubi_bs_init_complete(void *cb_arg, struct spdk_blob_store *bs, int bserrno) {
     struct ubi_create_context *context = cb_arg;
-
-    SPDK_WARNLOG("ubi_bs_init_complete\n");
 
     if (bserrno) {
         UBI_ERRLOG(context->ubi_bdev, "Could not initialize blobstore: %s\n",
@@ -177,8 +167,6 @@ void bdev_ubi_create(const struct spdk_ubi_bdev_opts *opts,
                      struct ubi_create_context *context) {
     struct ubi_bdev *ubi_bdev;
     int rc;
-
-    SPDK_WARNLOG("bdev_ubi_create\n");
 
     if (!opts) {
         SPDK_ERRLOG("No options provided for Ubi bdev %s.\n", opts->name);
@@ -281,8 +269,6 @@ static void ubi_destruct_blob_close_cb(void *cb_arg, int bserrno) {
 static void ubi_finish_create(int status, struct ubi_create_context *context) {
     struct ubi_bdev *ubi_bdev = context->ubi_bdev;
 
-    SPDK_WARNLOG("ubi_finish_create: %d\n", status);
-
     if (status == 0) {
         status = spdk_bdev_register(&ubi_bdev->bdev);
         if (status != 0) {
@@ -319,7 +305,6 @@ static void ubi_finish_create(int status, struct ubi_create_context *context) {
 void bdev_ubi_delete(const char *bdev_name, spdk_delete_ubi_complete cb_fn,
                      void *cb_arg) {
     int rc;
-    SPDK_WARNLOG("bdev_ubi_delete\n");
     rc = spdk_bdev_unregister_by_name(bdev_name, &ubi_if, cb_fn, cb_arg);
     if (rc != 0) {
         cb_fn(cb_arg, rc);
@@ -340,8 +325,6 @@ static void _device_unregister_cb(void *io_device) {
  */
 static int ubi_destruct(void *ctx) {
     struct ubi_bdev *ubi_bdev = ctx;
-
-    SPDK_WARNLOG("ubi_destruct\n");
 
     TAILQ_REMOVE(&g_ubi_bdev_head, ubi_bdev, tailq);
 
@@ -418,6 +401,8 @@ static void ubi_blob_io_complete(void *cb_arg, int bserrno) {
     struct ubi_bdev_io *ubi_io = cb_arg;
     struct spdk_bdev_io *bdev_io = spdk_bdev_io_from_ctx(ubi_io);
 
+    SPDK_WARNLOG("ubi_blob_io_complete: %d\n", bserrno);
+
     spdk_bdev_io_complete(bdev_io, bserrno ? SPDK_BDEV_IO_STATUS_FAILED
                                            : SPDK_BDEV_IO_STATUS_SUCCESS);
 }
@@ -434,22 +419,31 @@ static void ubi_submit_request(struct spdk_io_channel *_ch,
     struct spdk_blob *blob = ubi_bdev->blob;
     struct spdk_io_channel *blob_ch = ch->bs_channel;
 
+    SPDK_WARNLOG("ubi_submit_request. type: %d, blob_ch: %p\n", bdev_io->type, blob_ch);
+
     uint64_t io_unit_size = spdk_bs_get_io_unit_size(ubi_bdev->blobstore);
     uint64_t offset_bytes = bdev_io->u.bdev.offset_blocks * bdev_io->bdev->blocklen;
     uint64_t length_bytes = bdev_io->u.bdev.num_blocks * bdev_io->bdev->blocklen;
     uint64_t offset_io_units = offset_bytes / io_unit_size;
     uint64_t length_io_units = length_bytes / io_unit_size;
 
+    struct ubi_bdev_io *ubi_io = (struct ubi_bdev_io *)bdev_io->driver_ctx;
+    ubi_io->ubi_bdev = ubi_bdev;
+    ubi_io->ubi_ch = ch;
+    ubi_io->block_offset = bdev_io->u.bdev.offset_blocks;
+    ubi_io->block_count = bdev_io->u.bdev.num_blocks;
+    ubi_io->op.type = UBI_BDEV_IO;
+
     switch (bdev_io->type) {
     case SPDK_BDEV_IO_TYPE_READ:
         spdk_blob_io_readv(blob, blob_ch, bdev_io->u.bdev.iovs, bdev_io->u.bdev.iovcnt,
                            offset_io_units, length_io_units, ubi_blob_io_complete,
-                           bdev_io);
+                           ubi_io);
         break;
     case SPDK_BDEV_IO_TYPE_WRITE:
         spdk_blob_io_writev(blob, blob_ch, bdev_io->u.bdev.iovs, bdev_io->u.bdev.iovcnt,
                             offset_io_units, length_io_units, ubi_blob_io_complete,
-                            bdev_io);
+                            ubi_io);
         break;
     case SPDK_BDEV_IO_TYPE_FLUSH:
         // spdk_blob_io_flush(blob, blob_ch, ubi_io_completion_cb, bdev_io);

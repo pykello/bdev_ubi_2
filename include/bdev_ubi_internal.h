@@ -93,7 +93,6 @@ void ubi_io_completion_cb(struct spdk_bdev_io *bdev_io, bool success, void *cb_a
 
 /* spdk_bs_dev_uring.c */
 struct spdk_bs_dev *bs_dev_uring_create(const char *filename, bool directio);
-void bs_dev_uring_poll(struct spdk_io_channel *channel);
 
 /* macros */
 #define UBI_ERRLOG(ubi_bdev, format, ...)                                                \

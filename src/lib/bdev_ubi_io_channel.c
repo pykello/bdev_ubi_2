@@ -48,15 +48,7 @@ void ubi_destroy_channel_cb(void *io_device, void *ctx_buf) {
 /*
  * ubi_io_poll is the poller function that is called regularly by SPDK.
  */
-static int ubi_io_poll(void *arg) {
-    struct ubi_io_channel *ch = arg;
-    struct ubi_bdev *ubi_bdev = ch->ubi_bdev;
-
-    struct spdk_io_channel *uring_ch = spdk_io_channel_from_ctx(ubi_bdev->parent_bs_dev);
-    bs_dev_uring_poll(uring_ch);
-
-    return SPDK_POLLER_BUSY;
-}
+static int ubi_io_poll(void *arg) { return SPDK_POLLER_IDLE; }
 
 /*
  * ubi_io_completion_cb cleans up and marks the I/O request as completed.
