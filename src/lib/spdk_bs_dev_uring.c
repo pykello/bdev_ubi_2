@@ -99,7 +99,6 @@ static void bs_dev_uring_destroy_channel_cb(void *io_device, void *ctx_buf) {
     io_uring_queue_exit(&ch->image_file_ring);
     close(ch->image_file_fd);
     spdk_poller_unregister(&ch->poller);
-    free(ch);
 }
 
 static struct spdk_io_channel *bs_dev_uring_create_channel(struct spdk_bs_dev *dev) {
