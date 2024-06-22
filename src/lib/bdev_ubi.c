@@ -401,8 +401,6 @@ static void ubi_blob_io_complete(void *cb_arg, int bserrno) {
     struct ubi_bdev_io *ubi_io = cb_arg;
     struct spdk_bdev_io *bdev_io = spdk_bdev_io_from_ctx(ubi_io);
 
-    SPDK_WARNLOG("ubi_blob_io_complete: %d\n", bserrno);
-
     spdk_bdev_io_complete(bdev_io, bserrno ? SPDK_BDEV_IO_STATUS_FAILED
                                            : SPDK_BDEV_IO_STATUS_SUCCESS);
 }
@@ -418,8 +416,6 @@ static void ubi_submit_request(struct spdk_io_channel *_ch,
     struct ubi_bdev *ubi_bdev = bdev_io->bdev->ctxt;
     struct spdk_blob *blob = ubi_bdev->blob;
     struct spdk_io_channel *blob_ch = ch->bs_channel;
-
-    SPDK_WARNLOG("ubi_submit_request. type: %d, blob_ch: %p\n", bdev_io->type, blob_ch);
 
     uint64_t io_unit_size = spdk_bs_get_io_unit_size(ubi_bdev->blobstore);
     uint64_t offset_bytes = bdev_io->u.bdev.offset_blocks * bdev_io->bdev->blocklen;

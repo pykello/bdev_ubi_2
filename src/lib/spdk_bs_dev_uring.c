@@ -33,10 +33,6 @@ int bs_dev_uring_poll(void *arg) {
     }
 
     int ret = io_uring_peek_batch_cqe(ring, cqe, 64);
-    if (ret != 0) {
-        SPDK_WARNLOG("io_uring_peek_batch_cqe: %d\n", ret);
-    }
-
     if (ret == -EAGAIN) {
         return SPDK_POLLER_BUSY;
     } else if (ret < 0) {
@@ -80,7 +76,6 @@ static int bs_dev_uring_create_channel_cb(void *io_device, void *ctx_buf) {
     struct io_uring_params io_uring_params;
     memset(&io_uring_params, 0, sizeof(io_uring_params));
     int rc = io_uring_queue_init(UBI_URING_QUEUE_SIZE, &ch->image_file_ring, 0);
-    SPDK_WARNLOG("created io_uring: %d\n", rc);
     if (rc != 0) {
         SPDK_ERRLOG("Unable to setup io_uring: %s\n", strerror(-rc));
         close(ch->image_file_fd);
@@ -95,7 +90,6 @@ static int bs_dev_uring_create_channel_cb(void *io_device, void *ctx_buf) {
 
 static void bs_dev_uring_destroy_channel_cb(void *io_device, void *ctx_buf) {
     struct bs_dev_uring_io_channel *ch = ctx_buf;
-    SPDK_WARNLOG("bs_dev_uring_destroy_channel_cb\n");
     io_uring_queue_exit(&ch->image_file_ring);
     close(ch->image_file_fd);
     spdk_poller_unregister(&ch->poller);
@@ -103,7 +97,6 @@ static void bs_dev_uring_destroy_channel_cb(void *io_device, void *ctx_buf) {
 
 static struct spdk_io_channel *bs_dev_uring_create_channel(struct spdk_bs_dev *dev) {
     struct spdk_io_channel *result = spdk_get_io_channel(dev);
-    SPDK_WARNLOG("bs_dev_uring_create_channel: %p\n", result);
     return result;
 }
 
@@ -123,7 +116,6 @@ static void bs_dev_uring_read(struct spdk_bs_dev *dev, struct spdk_io_channel *c
     struct bs_dev_uring_io_channel *ch = spdk_io_channel_get_ctx(channel);
     struct io_uring *ring = &ch->image_file_ring;
     struct io_uring_sqe *sqe = io_uring_get_sqe(ring);
-    SPDK_WARNLOG("read lba=%lu lba_count=%u, ch=%p\n", lba, lba_count, ch);
     io_uring_prep_read(sqe, ch->image_file_fd, payload,
                        lba_count * BS_DEV_URING_BLOCK_SIZE,
                        lba * BS_DEV_URING_BLOCK_SIZE);
@@ -140,15 +132,6 @@ static void bs_dev_uring_readv(struct spdk_bs_dev *dev, struct spdk_io_channel *
                                struct iovec *iov, int iovcnt, uint64_t lba,
                                uint32_t lba_count, struct spdk_bs_dev_cb_args *cb_args) {
     struct bs_dev_uring_io_channel *ch = spdk_io_channel_get_ctx(channel);
-
-    SPDK_WARNLOG("readv lba=%lu lba_count=%u, iovcnt=%u\n", lba, lba_count, iovcnt);
-    for (int i = 0; i < iovcnt; i++) {
-        SPDK_WARNLOG("iov[%d].iov_len=%lu, channel=%p, ch=%p, dev=%p\n", i,
-                     iov[i].iov_len, channel, ch, dev);
-    }
-
-    cb_args->cb_fn(cb_args->channel, cb_args->cb_arg, 0);
-    return;
 
     struct io_uring *ring = &ch->image_file_ring;
     struct io_uring_sqe *sqe = io_uring_get_sqe(ring);
