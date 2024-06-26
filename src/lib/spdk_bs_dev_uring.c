@@ -5,7 +5,7 @@
 #include "spdk/thread.h"
 #include <liburing.h>
 
-#define BS_DEV_URING_BLOCK_SIZE 4096
+#define BS_DEV_URING_BLOCK_SIZE 512
 #define UBI_URING_QUEUE_SIZE 128
 
 struct bs_dev_uring_io_channel {
@@ -20,17 +20,11 @@ struct bs_dev_uring {
     bool directio;
 };
 
-static bool printed = false;
-
 int bs_dev_uring_poll(void *arg) {
     struct bs_dev_uring_io_channel *ch = arg;
     struct io_uring *ring = &ch->image_file_ring;
 
     struct io_uring_cqe *cqe[64];
-    if (!printed) {
-        SPDK_WARNLOG("ch=%p\n", ch);
-        printed = true;
-    }
 
     int ret = io_uring_peek_batch_cqe(ring, cqe, 64);
     if (ret == -EAGAIN) {
@@ -59,8 +53,6 @@ static int bs_dev_uring_create_channel_cb(void *io_device, void *ctx_buf) {
     struct bs_dev_uring *uring_dev = (struct bs_dev_uring *)io_device;
     struct bs_dev_uring_io_channel *ch = ctx_buf;
 
-    SPDK_WARNLOG("bs_dev_uring_create_channel_cb\n");
-
     int open_flags = O_RDONLY;
     if (uring_dev->directio)
         open_flags |= O_DIRECT;
@@ -70,8 +62,6 @@ static int bs_dev_uring_create_channel_cb(void *io_device, void *ctx_buf) {
         free(ch);
         return -1;
     }
-
-    SPDK_WARNLOG("opened %s\n", uring_dev->filename);
 
     struct io_uring_params io_uring_params;
     memset(&io_uring_params, 0, sizeof(io_uring_params));
@@ -116,9 +106,8 @@ static void bs_dev_uring_read(struct spdk_bs_dev *dev, struct spdk_io_channel *c
     struct bs_dev_uring_io_channel *ch = spdk_io_channel_get_ctx(channel);
     struct io_uring *ring = &ch->image_file_ring;
     struct io_uring_sqe *sqe = io_uring_get_sqe(ring);
-    io_uring_prep_read(sqe, ch->image_file_fd, payload,
-                       lba_count * BS_DEV_URING_BLOCK_SIZE,
-                       lba * BS_DEV_URING_BLOCK_SIZE);
+    io_uring_prep_read(sqe, ch->image_file_fd, payload, lba_count * dev->blocklen,
+                       lba * dev->blocklen);
     io_uring_sqe_set_data(sqe, cb_args);
 
     int ret = io_uring_submit(ring);
@@ -132,7 +121,6 @@ static void bs_dev_uring_readv(struct spdk_bs_dev *dev, struct spdk_io_channel *
                                struct iovec *iov, int iovcnt, uint64_t lba,
                                uint32_t lba_count, struct spdk_bs_dev_cb_args *cb_args) {
     struct bs_dev_uring_io_channel *ch = spdk_io_channel_get_ctx(channel);
-
     struct io_uring *ring = &ch->image_file_ring;
     struct io_uring_sqe *sqe = io_uring_get_sqe(ring);
     io_uring_prep_readv(sqe, ch->image_file_fd, iov, iovcnt,
@@ -228,7 +216,8 @@ static void bs_dev_uring_copy(struct spdk_bs_dev *dev, struct spdk_io_channel *c
 
 static bool bs_dev_uring_is_degraded(struct spdk_bs_dev *dev) { return false; }
 
-struct spdk_bs_dev *bs_dev_uring_create(const char *filename, bool directio) {
+struct spdk_bs_dev *bs_dev_uring_create(const char *filename, uint32_t blocklen,
+                                        bool directio) {
     struct bs_dev_uring *uring_dev = calloc(1, sizeof(struct bs_dev_uring));
     if (uring_dev == NULL) {
         SPDK_ERRLOG("could not allocate uring_dev\n");
@@ -242,8 +231,8 @@ struct spdk_bs_dev *bs_dev_uring_create(const char *filename, bool directio) {
         return NULL;
     }
 
-    uring_dev->base.blockcnt = statBuffer.st_size / BS_DEV_URING_BLOCK_SIZE;
-    uring_dev->base.blocklen = BS_DEV_URING_BLOCK_SIZE;
+    uring_dev->base.blockcnt = statBuffer.st_size / blocklen;
+    uring_dev->base.blocklen = blocklen;
 
     strcpy(uring_dev->filename, filename);
     uring_dev->directio = directio;
@@ -271,6 +260,5 @@ struct spdk_bs_dev *bs_dev_uring_create(const char *filename, bool directio) {
                             bs_dev_uring_destroy_channel_cb,
                             sizeof(struct bs_dev_uring_io_channel), NULL);
 
-    SPDK_WARNLOG("created uring_dev: %p\n", dev);
     return dev;
 }

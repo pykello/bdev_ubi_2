@@ -92,7 +92,8 @@ void ubi_destroy_channel_cb(void *io_device, void *ctx_buf);
 void ubi_io_completion_cb(struct spdk_bdev_io *bdev_io, bool success, void *cb_arg);
 
 /* spdk_bs_dev_uring.c */
-struct spdk_bs_dev *bs_dev_uring_create(const char *filename, bool directio);
+struct spdk_bs_dev *bs_dev_uring_create(const char *filename, uint32_t blocklen,
+                                        bool directio);
 
 /* macros */
 #define UBI_ERRLOG(ubi_bdev, format, ...)                                                \

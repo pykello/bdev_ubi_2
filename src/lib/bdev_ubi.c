@@ -91,8 +91,9 @@ static void ubi_blob_resize_complete(void *arg1, int bserrno) {
         return;
     }
 
-    struct spdk_bs_dev *parent_bs_dev =
-        bs_dev_uring_create(context->ubi_bdev->image_path, context->ubi_bdev->directio);
+    struct spdk_bs_dev *parent_bs_dev = bs_dev_uring_create(
+        context->ubi_bdev->image_path, context->ubi_bdev->bdev.blocklen,
+        context->ubi_bdev->directio);
     char *esnap_id = context->ubi_bdev->esnap_id;
     uint32_t esnap_id_len = sizeof(context->ubi_bdev->esnap_id);
     for (int i = 0; i < esnap_id_len; i++) {
