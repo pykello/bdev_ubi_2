@@ -45,6 +45,7 @@ void test_bdev_io(const char *bdev_name, const char *image_path, int *n_tests,
         (*n_tests)++;                                                                    \
         if (!(x)) {                                                                      \
             (*n_failures)++;                                                             \
+            SPDK_ERRLOG("Test failed: %s\n", #x);                                        \
         }                                                                                \
     }
 
@@ -171,8 +172,14 @@ static bool test_random_ops(struct bdev_io_test_state *state, uint32_t count) {
             execute_spdk_function(io_thread_flush, &req);
             break;
         }
-        if (!req.success)
+        if (!req.success) {
+            SPDK_ERRLOG("Random operation failed: i=%lu, type=%s, block_idx=%lu\n", i,
+                        type == 0   ? "read"
+                        : type == 1 ? "write"
+                                    : "flush",
+                        req.block_idx);
             return false;
+        }
     }
 
     return true;

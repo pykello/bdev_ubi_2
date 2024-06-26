@@ -35,7 +35,7 @@ void run_ut_thread(void *arg) {
     pthread_cond_init(&g_test_cond, NULL);
 
     for (size_t i = 0; i < opts->n_bdevs; i++) {
-        SPDK_NOTICELOG("Testing %s\n", opts->bdev_names[i]);
+        SPDK_NOTICELOG("Testing %s, n_failures: %d\n", opts->bdev_names[i], n_failures);
         test_bdev_io(opts->bdev_names[i], opts->image_path, &n_tests, &n_failures);
     }
 

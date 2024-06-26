@@ -296,6 +296,12 @@ static void ubi_finish_create(int status, struct ubi_create_context *context) {
         // free(ubi_bdev);
     }
 
+    ubi_bdev->bdev.blockcnt = spdk_blob_get_num_pages(ubi_bdev->blob);
+    ubi_bdev->bdev.blocklen = spdk_bs_get_page_size(ubi_bdev->blobstore);
+    SPDK_WARNLOG("ubi_bdev %s created with %" PRIu64 " blocks of size %" PRIu32
+                 " bytes\n",
+                 ubi_bdev->bdev.name, ubi_bdev->bdev.blockcnt, ubi_bdev->bdev.blocklen);
+
     context->done_fn(context->done_arg, &ubi_bdev->bdev, status);
     free(context);
 }
