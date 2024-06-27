@@ -1,0 +1,10 @@
+build/*
+bin/*
+.vscode/*
+*.code-workspace
+*.o
+*.gcda
+*.gcno
+valgrind.log
+coverage.info
+coverage_report/*
