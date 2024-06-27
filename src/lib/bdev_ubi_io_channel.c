@@ -38,7 +38,6 @@ int ubi_create_channel_cb(void *io_device, void *ctx_buf) {
 void ubi_destroy_channel_cb(void *io_device, void *ctx_buf) {
     struct ubi_io_channel *ch = ctx_buf;
     spdk_poller_unregister(&ch->poller);
-
     spdk_bs_free_io_channel(ch->bs_channel);
 }
 

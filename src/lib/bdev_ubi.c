@@ -226,7 +226,7 @@ void bdev_ubi_create(const struct spdk_ubi_bdev_opts *opts,
     ubi_bdev->bdev.blockcnt = ubi_bdev->bs_dev->blockcnt;
     ubi_bdev->bdev.write_cache = 0;
 
-    ubi_bdev->bdev.product_name = "Ubi disk";
+    ubi_bdev->bdev.product_name = "Ubi_disk";
     ubi_bdev->bdev.ctxt = ubi_bdev;
     ubi_bdev->bdev.fn_table = &ubi_fn_table;
     ubi_bdev->bdev.module = &ubi_if;
@@ -271,6 +271,12 @@ static void ubi_finish_create(int status, struct ubi_create_context *context) {
     struct ubi_bdev *ubi_bdev = context->ubi_bdev;
 
     if (status == 0) {
+        ubi_bdev->bdev.blockcnt = spdk_blob_get_num_io_units(ubi_bdev->blob);
+        ubi_bdev->bdev.blocklen = spdk_bs_get_io_unit_size(ubi_bdev->blobstore);
+        SPDK_WARNLOG(
+            "ubi_bdev %s created with %" PRIu64 " blocks of size %" PRIu32 " bytes\n",
+            ubi_bdev->bdev.name, ubi_bdev->bdev.blockcnt, ubi_bdev->bdev.blocklen);
+
         status = spdk_bdev_register(&ubi_bdev->bdev);
         if (status != 0) {
             UBI_ERRLOG(ubi_bdev, "could not register ubi_bdev\n");
@@ -295,12 +301,6 @@ static void ubi_finish_create(int status, struct ubi_create_context *context) {
         // free(ubi_bdev->bdev.name);
         // free(ubi_bdev);
     }
-
-    ubi_bdev->bdev.blockcnt = spdk_blob_get_num_pages(ubi_bdev->blob);
-    ubi_bdev->bdev.blocklen = spdk_bs_get_page_size(ubi_bdev->blobstore);
-    SPDK_WARNLOG("ubi_bdev %s created with %" PRIu64 " blocks of size %" PRIu32
-                 " bytes\n",
-                 ubi_bdev->bdev.name, ubi_bdev->bdev.blockcnt, ubi_bdev->bdev.blocklen);
 
     context->done_fn(context->done_arg, &ubi_bdev->bdev, status);
     free(context);
@@ -439,11 +439,15 @@ static void ubi_submit_request(struct spdk_io_channel *_ch,
 
     switch (bdev_io->type) {
     case SPDK_BDEV_IO_TYPE_READ:
+        // SPDK_WARNLOG("read %s %" PRIu64 " %" PRIu64 "\n", bdev_io->bdev->name,
+        //              bdev_io->u.bdev.offset_blocks, bdev_io->u.bdev.num_blocks);
         spdk_blob_io_readv(blob, blob_ch, bdev_io->u.bdev.iovs, bdev_io->u.bdev.iovcnt,
                            offset_io_units, length_io_units, ubi_blob_io_complete,
                            ubi_io);
         break;
     case SPDK_BDEV_IO_TYPE_WRITE:
+        // SPDK_WARNLOG("write %s %" PRIu64 " %" PRIu64 "\n", bdev_io->bdev->name,
+        //              bdev_io->u.bdev.offset_blocks, bdev_io->u.bdev.num_blocks);
         spdk_blob_io_writev(blob, blob_ch, bdev_io->u.bdev.iovs, bdev_io->u.bdev.iovcnt,
                             offset_io_units, length_io_units, ubi_blob_io_complete,
                             ubi_io);
@@ -477,7 +481,7 @@ static void ubi_handle_base_bdev_event(enum spdk_bdev_event_type type,
                                        struct spdk_bdev *bdev, void *event_ctx) {
     switch (type) {
     default:
-        SPDK_NOTICELOG("Unsupported bdev event: type %d\n", type);
+        SPDK_NOTICELOG("Unsupported bdev event: type %d, bdev: %s\n", type, bdev->name);
         break;
     }
 }

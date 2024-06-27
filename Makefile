@@ -24,7 +24,7 @@ endif
 LIB_SRCS := $(shell find $(LIB_DIR) -name '*.c')
 LIB_OBJS := $(LIB_SRCS:%.c=%.o)
 
-APP_TARGETS = $(BIN_DIR)/vhost_ubi
+APP_TARGETS = $(BIN_DIR)/vhost_ubi $(BIN_DIR)/spdk_dd
 
 .PHONY: all clean
 all: # forward declaration

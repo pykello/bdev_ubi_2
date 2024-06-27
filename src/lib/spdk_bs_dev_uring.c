@@ -5,7 +5,6 @@
 #include "spdk/thread.h"
 #include <liburing.h>
 
-#define BS_DEV_URING_BLOCK_SIZE 512
 #define UBI_URING_QUEUE_SIZE 128
 
 struct bs_dev_uring_io_channel {
@@ -123,8 +122,9 @@ static void bs_dev_uring_readv(struct spdk_bs_dev *dev, struct spdk_io_channel *
     struct bs_dev_uring_io_channel *ch = spdk_io_channel_get_ctx(channel);
     struct io_uring *ring = &ch->image_file_ring;
     struct io_uring_sqe *sqe = io_uring_get_sqe(ring);
+
     io_uring_prep_readv(sqe, ch->image_file_fd, iov, iovcnt,
-                        lba * BS_DEV_URING_BLOCK_SIZE);
+                        lba * dev->blocklen);
     io_uring_sqe_set_data(sqe, cb_args);
 
     int ret = io_uring_submit(ring);

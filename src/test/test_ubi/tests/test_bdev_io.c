@@ -174,10 +174,10 @@ static bool test_random_ops(struct bdev_io_test_state *state, uint32_t count) {
         }
         if (!req.success) {
             SPDK_ERRLOG("Random operation failed: i=%lu, type=%s, block_idx=%lu\n", i,
-                        type == 0   ? "read"
-                        : type == 1 ? "write"
-                                    : "flush",
-                        req.block_idx);
+                type == 0 ? "read" :
+                type == 1 ? "write" :
+                "flush",
+                req.block_idx);
             return false;
         }
     }
