@@ -38,6 +38,13 @@ struct ubi_bdev {
     struct spdk_blob *blob;
     char esnap_id[64];
 
+    struct {
+        bool in_progress;
+        int result;
+        uint64_t copied_clusters;
+        uint64_t total_clusters;
+    } snapshot_status;
+
     /*
      * Thread where ubi_bdev was initialized. It's essential to close the base
      * bdev in the same thread in which it was opened.

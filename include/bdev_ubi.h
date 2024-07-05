@@ -7,6 +7,7 @@
 #define DEFAULT_STRIPE_SIZE_KB 1024
 
 typedef void (*spdk_delete_ubi_complete)(void *cb_arg, int bdeverrno);
+typedef void (*spdk_snapshot_ubi_complete)(void *cb_arg, int bdeverrno);
 
 struct spdk_bdev;
 struct spdk_uuid;
@@ -44,5 +45,7 @@ struct ubi_create_context {
 void bdev_ubi_create(const struct spdk_ubi_bdev_opts *opts,
                      struct ubi_create_context *context);
 void bdev_ubi_delete(const char *bdev_name, spdk_delete_ubi_complete cb_fn, void *cb_arg);
+void bdev_ubi_snapshot(const char *name, const char *path,
+                       spdk_snapshot_ubi_complete cb_fn, void *cb_arg);
 
 #endif /* SPDK_BDEV_NULL_H */

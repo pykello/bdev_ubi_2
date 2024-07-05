@@ -5,6 +5,7 @@
 #include "spdk/util.h"
 
 #include "bdev_ubi.h"
+#include "bdev_ubi_internal.h"
 
 struct rpc_construct_ubi {
     char *name;
@@ -128,3 +129,81 @@ static void rpc_bdev_ubi_delete(struct spdk_jsonrpc_request *request,
     free(req.name);
 }
 SPDK_RPC_REGISTER("bdev_ubi_delete", rpc_bdev_ubi_delete, SPDK_RPC_RUNTIME)
+
+struct rpc_snapshot_ubi {
+    char *name;
+    char *path;
+};
+
+static const struct spdk_json_object_decoder rpc_snapshot_ubi_decoders[] = {
+    {"name", offsetof(struct rpc_snapshot_ubi, name), spdk_json_decode_string},
+    {"path", offsetof(struct rpc_snapshot_ubi, path), spdk_json_decode_string},
+};
+
+static void rpc_bdev_ubi_snapshot_cb(void *cb_arg, int bdeverrno) {
+    struct spdk_jsonrpc_request *request = cb_arg;
+
+    if (bdeverrno == 0) {
+        spdk_jsonrpc_send_bool_response(request, true);
+    } else {
+        spdk_jsonrpc_send_error_response(request, bdeverrno, spdk_strerror(-bdeverrno));
+    }
+}
+
+static void rpc_bdev_ubi_snapshot(struct spdk_jsonrpc_request *request,
+                                  const struct spdk_json_val *params) {
+    struct rpc_snapshot_ubi req = {NULL};
+
+    if (spdk_json_decode_object(params, rpc_snapshot_ubi_decoders,
+                                SPDK_COUNTOF(rpc_snapshot_ubi_decoders), &req)) {
+        spdk_jsonrpc_send_error_response(request, SPDK_JSONRPC_ERROR_INTERNAL_ERROR,
+                                         "spdk_json_decode_object failed");
+        return;
+    }
+
+    bdev_ubi_snapshot(req.name, req.path, rpc_bdev_ubi_snapshot_cb, request);
+    free(req.name);
+    free(req.path);
+}
+SPDK_RPC_REGISTER("bdev_ubi_snapshot", rpc_bdev_ubi_snapshot, SPDK_RPC_RUNTIME)
+
+struct rpc_snapshot_ubi_status {
+    char *name;
+};
+
+static const struct spdk_json_object_decoder rpc_snapshot_ubi_status_decoders[] = {
+    {"name", offsetof(struct rpc_snapshot_ubi, name), spdk_json_decode_string}};
+
+static void rpc_bdev_ubi_snapshot_status(struct spdk_jsonrpc_request *request,
+                                         const struct spdk_json_val *params) {
+    struct rpc_snapshot_ubi_status req = {NULL};
+    if (spdk_json_decode_object(params, rpc_snapshot_ubi_status_decoders,
+                                SPDK_COUNTOF(rpc_snapshot_ubi_status_decoders), &req)) {
+        spdk_jsonrpc_send_error_response(request, SPDK_JSONRPC_ERROR_INTERNAL_ERROR,
+                                         "spdk_json_decode_object failed");
+        return;
+    }
+
+    struct spdk_bdev *bdev = spdk_bdev_get_by_name(req.name);
+    if (bdev == NULL) {
+        spdk_jsonrpc_send_error_response(request, -ENOENT, "bdev not found");
+        return;
+    }
+
+    struct ubi_bdev *ubi_bdev = SPDK_CONTAINEROF(bdev, struct ubi_bdev, bdev);
+
+    struct spdk_json_write_ctx *w;
+    w = spdk_jsonrpc_begin_result(request);
+    spdk_json_write_object_begin(w);
+    spdk_json_write_named_string(w, "name", req.name);
+    spdk_json_write_named_bool(w, "in_progress", ubi_bdev->snapshot_status.in_progress);
+    spdk_json_write_named_int32(w, "result", ubi_bdev->snapshot_status.result);
+    spdk_json_write_named_uint64(w, "copied_clusters",
+                                 ubi_bdev->snapshot_status.copied_clusters);
+    spdk_json_write_named_uint64(w, "total_clusters",
+                                 ubi_bdev->snapshot_status.total_clusters);
+    spdk_json_write_object_end(w);
+    spdk_jsonrpc_end_result(request, w);
+}
+SPDK_RPC_REGISTER("bdev_ubi_snapshot_status", rpc_bdev_ubi_snapshot_status,
+                  SPDK_RPC_RUNTIME)
