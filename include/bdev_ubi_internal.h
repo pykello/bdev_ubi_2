@@ -39,6 +39,8 @@ struct ubi_bdev {
     char esnap_id[64];
 
     struct {
+        struct spdk_bs_dev *shallow_copy_bs_dev;
+        spdk_blob_id snapshot_blobid;
         bool in_progress;
         int result;
         uint64_t copied_clusters;
@@ -100,6 +102,10 @@ void ubi_destroy_channel_cb(void *io_device, void *ctx_buf);
 /* spdk_bs_dev_uring.c */
 struct spdk_bs_dev *bs_dev_uring_create(const char *filename, uint32_t blocklen,
                                         bool directio);
+
+/* spdk_bs_dev_delta.c */
+struct spdk_bs_dev *bs_dev_delta_create(const char *filename, uint32_t blocklen,
+                                        uint32_t cluster_size);
 
 /* macros */
 #define UBI_ERRLOG(ubi_bdev, format, ...)                                                \
