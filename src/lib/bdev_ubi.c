@@ -89,6 +89,7 @@ static void ubi_blob_open_complete(void *arg1, struct spdk_blob *blob, int bserr
     }
 
     context->ubi_bdev->blob = blob;
+    context->ubi_bdev->blobid = spdk_blob_get_id(blob);
     ubi_finish_create(0, context);
 }
 
@@ -101,8 +102,6 @@ static void ubi_blob_create_complete(void *arg1, spdk_blob_id blobid, int bserrn
         ubi_finish_create(bserrno, context);
         return;
     }
-
-    context->ubi_bdev->blobid = blobid;
 
     spdk_bs_open_blob(context->ubi_bdev->blobstore, blobid, ubi_blob_open_complete,
                       context);

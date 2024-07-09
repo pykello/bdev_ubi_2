@@ -7,11 +7,6 @@
 
 #define UBI_URING_QUEUE_SIZE 128
 
-enum bs_dev_delta_direction {
-    BS_DEV_DELTA_READ,
-    BS_DEV_DELTA_WRITE,
-};
-
 struct bs_dev_delta_io_channel {
     int delta_file_fd;
     struct io_uring image_file_ring;
@@ -62,10 +57,11 @@ static int bs_dev_delta_create_channel_cb(void *io_device, void *ctx_buf) {
     struct bs_dev_delta *delta_dev = io_device;
     struct bs_dev_delta_io_channel *ch = ctx_buf;
 
-    int open_flags = (delta_dev->direction == BS_DEV_DELTA_READ) ? O_RDONLY : O_RDWR;
-    if (delta_dev->directio)
-        open_flags |= O_DIRECT;
-    ch->delta_file_fd = open(delta_dev->filename, open_flags);
+    if (delta_dev->direction == BS_DEV_DELTA_WRITE) {
+        ch->delta_file_fd = open(delta_dev->filename, O_RDWR | O_CREAT, 0644);
+    } else {
+        ch->delta_file_fd = open(delta_dev->filename, O_RDONLY);
+    }
     if (ch->delta_file_fd < 0) {
         SPDK_ERRLOG("could not open %s: %s\n", delta_dev->filename, strerror(errno));
         free(ch);
@@ -251,24 +247,19 @@ static void bs_dev_delta_copy(struct spdk_bs_dev *dev, struct spdk_io_channel *c
 
 static bool bs_dev_delta_is_degraded(struct spdk_bs_dev *dev) { return false; }
 
-struct spdk_bs_dev *bs_dev_delta_create(const char *filename, uint32_t blocklen,
-                                        uint32_t cluster_size) {
+struct spdk_bs_dev *bs_dev_delta_create(const char *filename, uint64_t blockcnt,
+                                        uint32_t blocklen, uint32_t cluster_size,
+                                        enum bs_dev_delta_direction direction) {
     struct bs_dev_delta *delta_dev = calloc(1, sizeof *delta_dev);
     if (delta_dev == NULL) {
         SPDK_ERRLOG("could not allocate delta_dev\n");
         return NULL;
     }
 
-    struct stat statBuffer;
-    if (stat(filename, &statBuffer) != 0) {
-        SPDK_ERRLOG("could not stat %s: %s\n", filename, strerror(errno));
-        free(delta_dev);
-        return NULL;
-    }
-
-    delta_dev->base.blockcnt = statBuffer.st_size / blocklen;
+    delta_dev->base.blockcnt = blockcnt;
     delta_dev->base.blocklen = blocklen;
     delta_dev->cluster_size = cluster_size;
+    delta_dev->direction = direction;
 
     strcpy(delta_dev->filename, filename);
     struct spdk_bs_dev *dev = &delta_dev->base;
