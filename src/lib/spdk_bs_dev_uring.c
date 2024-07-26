@@ -95,6 +95,7 @@ static void bs_dev_uring_destroy_channel(struct spdk_bs_dev *dev,
 }
 
 static void bs_dev_uring_destroy(struct spdk_bs_dev *dev) {
+    SPDK_WARNLOG("unregistering uring_dev: %p\n", dev);
     spdk_io_device_unregister(dev, NULL);
     // TODO: free anything?
 }
@@ -274,6 +275,8 @@ struct spdk_bs_dev *bs_dev_uring_create(const char *filename, uint32_t blocklen,
     dev->translate_lba = bs_dev_uring_translate_lba;
     dev->copy = bs_dev_uring_copy;
     dev->is_degraded = bs_dev_uring_is_degraded;
+
+    SPDK_WARNLOG("registering uring_dev: %p\n", dev);
 
     spdk_io_device_register(dev, bs_dev_uring_create_channel_cb,
                             bs_dev_uring_destroy_channel_cb,

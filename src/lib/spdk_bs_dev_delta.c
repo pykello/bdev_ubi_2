@@ -83,6 +83,17 @@ static int bs_dev_delta_create_channel_cb(void *io_device, void *ctx_buf) {
         ch->initialized = true;
     }
 
+    if (delta_dev->direction == BS_DEV_DELTA_WRITE) {
+        // reserve the space for the cluster_map using linux write
+        ssize_t n = write(ch->delta_file_fd, ch->cluster_map, sizeof(ch->cluster_map));
+        if (n < 0) {
+            SPDK_ERRLOG("could not write cluster_map: %s\n", strerror(errno));
+            close(ch->delta_file_fd);
+            free(ch);
+            return -1;
+        }
+    }
+
     struct io_uring_params io_uring_params;
     memset(&io_uring_params, 0, sizeof(io_uring_params));
     int rc = io_uring_queue_init(UBI_URING_QUEUE_SIZE, &ch->image_file_ring, 0);
@@ -136,7 +147,7 @@ static void bs_dev_delta_destroy(struct spdk_bs_dev *dev) {
 static void bs_dev_delta_read(struct spdk_bs_dev *dev, struct spdk_io_channel *channel,
                               void *payload, uint64_t lba, uint32_t lba_count,
                               struct spdk_bs_dev_cb_args *cb_args) {
-    SPDK_WARNLOG("read lba=%lu lba_count=%u\n", lba, lba_count);
+    SPDK_ERRLOG("read lba=%lu lba_count=%u\n", lba, lba_count);
     // TODO
     cb_args->cb_fn(cb_args->channel, cb_args->cb_arg, -ENOTSUP);
 }
@@ -144,7 +155,7 @@ static void bs_dev_delta_read(struct spdk_bs_dev *dev, struct spdk_io_channel *c
 static void bs_dev_delta_readv(struct spdk_bs_dev *dev, struct spdk_io_channel *channel,
                                struct iovec *iov, int iovcnt, uint64_t lba,
                                uint32_t lba_count, struct spdk_bs_dev_cb_args *cb_args) {
-    SPDK_WARNLOG("readv lba=%lu lba_count=%u\n", lba, lba_count);
+    SPDK_ERRLOG("readv lba=%lu lba_count=%u\n", lba, lba_count);
     struct bs_dev_delta_io_channel *ch = spdk_io_channel_get_ctx(channel);
     // check if the cluster is in the cluster_map
     // if not, read from the base device
@@ -165,14 +176,23 @@ static void bs_dev_delta_readv_ext(struct spdk_bs_dev *dev,
                                    int iovcnt, uint64_t lba, uint32_t lba_count,
                                    struct spdk_bs_dev_cb_args *cb_args,
                                    struct spdk_blob_ext_io_opts *ext_io_opts) {
-    SPDK_WARNLOG("readv_ext lba=%lu lba_count=%u\n", lba, lba_count);
+    SPDK_ERRLOG("readv_ext lba=%lu lba_count=%u\n", lba, lba_count);
     bs_dev_delta_readv(dev, channel, iov, iovcnt, lba, lba_count, cb_args);
 }
 
 static void bs_dev_delta_write(struct spdk_bs_dev *dev, struct spdk_io_channel *channel,
                                void *payload, uint64_t lba, uint32_t lba_count,
                                struct spdk_bs_dev_cb_args *cb_args) {
-    SPDK_WARNLOG("write lba=%lu lba_count=%u\n", lba, lba_count);
+    struct bs_dev_delta_io_channel *ch = spdk_io_channel_get_ctx(channel);
+    uint64_t size = dev->blocklen * lba_count;
+    SPDK_ERRLOG("write lba=%lu lba_count=%u, size=%lu\n", lba, lba_count, size);
+
+    int ret = write(ch->delta_file_fd, payload, size);
+    if (ret < 0) {
+        SPDK_ERRLOG("could not write to delta file: %s\n", strerror(errno));
+        cb_args->cb_fn(cb_args->channel, cb_args->cb_arg, -EIO);
+        return;
+    }
     // TODO
     cb_args->cb_fn(cb_args->channel, cb_args->cb_arg, 0);
 }
@@ -180,7 +200,9 @@ static void bs_dev_delta_write(struct spdk_bs_dev *dev, struct spdk_io_channel *
 static void bs_dev_delta_writev(struct spdk_bs_dev *dev, struct spdk_io_channel *channel,
                                 struct iovec *iov, int iovcnt, uint64_t lba,
                                 uint32_t lba_count, struct spdk_bs_dev_cb_args *cb_args) {
-    SPDK_WARNLOG("writev lba=%lu lba_count=%u\n", lba, lba_count);
+    SPDK_ERRLOG("writev lba=%lu lba_count=%u, len: %lu\n", lba, lba_count,
+                iov[0].iov_len);
+
     // TODO
     cb_args->cb_fn(cb_args->channel, cb_args->cb_arg, 0);
 }
@@ -190,14 +212,14 @@ static void bs_dev_delta_writev_ext(struct spdk_bs_dev *dev,
                                     int iovcnt, uint64_t lba, uint32_t lba_count,
                                     struct spdk_bs_dev_cb_args *cb_args,
                                     struct spdk_blob_ext_io_opts *ext_io_opts) {
-    SPDK_WARNLOG("writev_ext lba=%lu lba_count=%u\n", lba, lba_count);
+    SPDK_ERRLOG("writev_ext lba=%lu lba_count=%u\n", lba, lba_count);
     // TODO
     cb_args->cb_fn(cb_args->channel, cb_args->cb_arg, 0);
 }
 
 static void bs_dev_delta_flush(struct spdk_bs_dev *dev, struct spdk_io_channel *channel,
                                struct spdk_bs_dev_cb_args *cb_args) {
-    SPDK_WARNLOG("flush\n");
+    SPDK_ERRLOG("flush\n");
     // TODO
     cb_args->cb_fn(cb_args->channel, cb_args->cb_arg, -ENOTSUP);
 }
@@ -260,6 +282,10 @@ struct spdk_bs_dev *bs_dev_delta_create(const char *filename, uint64_t blockcnt,
     delta_dev->base.blocklen = blocklen;
     delta_dev->cluster_size = cluster_size;
     delta_dev->direction = direction;
+
+    SPDK_WARNLOG("creating delta device. filename=%s blockcnt=%lu blocklen=%u "
+                 "cluster_size=%u direction=%d\n",
+                 filename, blockcnt, blocklen, cluster_size, direction);
 
     strcpy(delta_dev->filename, filename);
     struct spdk_bs_dev *dev = &delta_dev->base;

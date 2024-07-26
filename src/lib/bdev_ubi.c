@@ -74,12 +74,16 @@ static int ubi_esnap_dev_create(void *bs_ctx, void *blob_ctx, struct spdk_blob *
                                 struct spdk_bs_dev **bs_dev) {
     SPDK_WARNLOG("esnap_dev_create\n");
     struct ubi_bdev *ubi_bdev = bs_ctx;
-    *bs_dev = ubi_bdev->parent_bs_dev;
+    *bs_dev = bs_dev_uring_create(ubi_bdev->image_path, ubi_bdev->bdev.blocklen,
+                                  ubi_bdev->directio);
     return 0;
 }
 
 static void ubi_blob_open_complete(void *arg1, struct spdk_blob *blob, int bserrno) {
     struct ubi_create_context *context = arg1;
+
+    SPDK_WARNLOG("ubi_blob_open_complete, blobid: %lx, blob: %p\n",
+                 spdk_blob_get_id(blob), blob);
 
     if (bserrno) {
         UBI_ERRLOG(context->ubi_bdev, "Could not open blob: %s\n",
@@ -90,11 +94,33 @@ static void ubi_blob_open_complete(void *arg1, struct spdk_blob *blob, int bserr
 
     context->ubi_bdev->blob = blob;
     context->ubi_bdev->blobid = spdk_blob_get_id(blob);
+
+    SPDK_ERRLOG("ubi_blob_open_complete: %lx\n", context->ubi_bdev->blobid);
+
     ubi_finish_create(0, context);
+}
+
+struct spdk_blob_xattr_opts g_xattrs2 = {0};
+
+static void ubi_blob_snapshot_complete(void *arg1, spdk_blob_id blobid, int bserrno) {
+    struct ubi_create_context *context = arg1;
+
+    SPDK_ERRLOG("ubi_blob_snapshot_complete: %lx\n", blobid);
+
+    if (bserrno) {
+        UBI_ERRLOG(context->ubi_bdev, "Could not create snapshot: %s\n",
+                   spdk_strerror(-bserrno));
+        ubi_finish_create(bserrno, context);
+        return;
+    }
+
+    spdk_bs_open_blob(context->ubi_bdev->blobstore, context->ubi_bdev->blobid,
+                      ubi_blob_open_complete, context);
 }
 
 static void ubi_blob_create_complete(void *arg1, spdk_blob_id blobid, int bserrno) {
     struct ubi_create_context *context = arg1;
+    SPDK_ERRLOG("ubi_blob_create_complete: %lx\n", blobid);
 
     if (bserrno) {
         UBI_ERRLOG(context->ubi_bdev, "Could not create blob: %s\n",
@@ -103,8 +129,9 @@ static void ubi_blob_create_complete(void *arg1, spdk_blob_id blobid, int bserrn
         return;
     }
 
-    spdk_bs_open_blob(context->ubi_bdev->blobstore, blobid, ubi_blob_open_complete,
-                      context);
+    context->ubi_bdev->blobid = blobid;
+    spdk_bs_create_snapshot(context->ubi_bdev->blobstore, blobid, &g_xattrs2,
+                            ubi_blob_snapshot_complete, context);
 }
 
 static void ubi_bs_init_complete(void *cb_arg, struct spdk_blob_store *bs, int bserrno) {
@@ -118,10 +145,6 @@ static void ubi_bs_init_complete(void *cb_arg, struct spdk_blob_store *bs, int b
     }
 
     context->ubi_bdev->blobstore = bs;
-
-    context->ubi_bdev->parent_bs_dev = bs_dev_uring_create(
-        context->ubi_bdev->image_path, context->ubi_bdev->bdev.blocklen,
-        context->ubi_bdev->directio);
 
     if (!context->format_bdev) {
         spdk_bs_iter_first(bs, ubi_blob_open_complete, context);

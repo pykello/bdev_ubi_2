@@ -31,7 +31,6 @@ struct ubi_bdev {
     bool directio;
 
     struct spdk_bs_dev *bs_dev;
-    struct spdk_bs_dev *parent_bs_dev;
 
     struct spdk_blob_store *blobstore;
     spdk_blob_id blobid;
