@@ -16,6 +16,7 @@ struct bs_dev_uring_io_channel {
 struct bs_dev_uring {
     struct spdk_bs_dev base;
     char filename[1024];
+    uint64_t cluster_map[1024 * 1024];
     bool directio;
 };
 
@@ -251,6 +252,14 @@ struct spdk_bs_dev *bs_dev_uring_create(const char *filename, const char *snapsh
         return NULL;
     }
 
+    int ret = (snapshot_path && snapshot_path[0]) ?
+        ubi_read_cluster_map(filename, uring_dev->cluster_map) : 0;
+    if (ret != 0) {
+        SPDK_ERRLOG("could not read cluster map\n");
+        free(uring_dev);
+        return NULL;
+    }
+
     uring_dev->base.blockcnt = statBuffer.st_size / blocklen;
     uring_dev->base.blocklen = blocklen;
 
@@ -275,6 +284,7 @@ struct spdk_bs_dev *bs_dev_uring_create(const char *filename, const char *snapsh
     dev->translate_lba = bs_dev_uring_translate_lba;
     dev->copy = bs_dev_uring_copy;
     dev->is_degraded = bs_dev_uring_is_degraded;
+
 
     SPDK_WARNLOG("registering uring_dev: %p\n", dev);
 

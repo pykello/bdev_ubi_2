@@ -25,6 +25,7 @@ struct bs_dev_delta {
 };
 
 int ubi_read_cluster_map(const char *filename, uint64_t *cluster_map) {
+    SPDK_WARNLOG("reading cluster_map from %s\n", filename);
     int fd = open(filename, O_RDONLY);
     if (fd < 0) {
         SPDK_ERRLOG("could not open %s: %s\n", filename, strerror(errno));
