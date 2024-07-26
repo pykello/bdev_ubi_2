@@ -18,6 +18,7 @@ struct spdk_uuid;
 struct spdk_ubi_bdev_opts {
     const char *name;
     const char *image_path;
+    const char *snapshot_path;
     const char *base_bdev_name;
     bool no_sync;
     bool directio;

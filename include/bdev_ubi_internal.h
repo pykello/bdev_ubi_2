@@ -26,6 +26,7 @@ struct ubi_bdev {
     struct spdk_bdev bdev;
 
     char image_path[UBI_PATH_LEN];
+    char snapshot_path[UBI_PATH_LEN];
     uint32_t alignment_bytes;
     bool no_sync;
     bool directio;

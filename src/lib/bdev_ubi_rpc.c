@@ -10,6 +10,7 @@
 struct rpc_construct_ubi {
     char *name;
     char *image_path;
+    char *snapshot_path;
     char *base_bdev_name;
     bool no_sync;
     bool format_bdev;
@@ -36,6 +37,8 @@ static const struct spdk_json_object_decoder rpc_construct_ubi_decoders[] = {
     {"no_sync", offsetof(struct rpc_construct_ubi, no_sync), spdk_json_decode_bool, true},
     {"directio", offsetof(struct rpc_construct_ubi, directio), spdk_json_decode_bool,
      true},
+    {"snapshot_path", offsetof(struct rpc_construct_ubi, snapshot_path),
+     spdk_json_decode_string, true},
     // deperacated options: stripe_size_kb, copy_on_read, directio
     {"stripe_size_kb", offsetof(struct rpc_construct_ubi, stripe_size_kb),
      spdk_json_decode_uint32, true},
@@ -86,6 +89,7 @@ static void rpc_bdev_ubi_create(struct spdk_jsonrpc_request *request,
     opts.no_sync = req.no_sync;
     opts.format_bdev = req.format_bdev;
     opts.directio = req.directio;
+    opts.snapshot_path = req.snapshot_path;
 
     struct ubi_create_context *context = calloc(1, sizeof(struct ubi_create_context));
     context->done_fn = bdev_ubi_create_done;

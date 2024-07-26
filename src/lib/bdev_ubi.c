@@ -214,6 +214,13 @@ void bdev_ubi_create(const struct spdk_ubi_bdev_opts *opts,
     strncpy(ubi_bdev->image_path, opts->image_path, UBI_PATH_LEN);
     ubi_bdev->image_path[UBI_PATH_LEN - 1] = 0;
 
+    if (opts->snapshot_path) {
+        strncpy(ubi_bdev->snapshot_path, opts->snapshot_path, UBI_PATH_LEN);
+        ubi_bdev->snapshot_path[UBI_PATH_LEN - 1] = 0;
+    } else {
+        ubi_bdev->snapshot_path[0] = 0;
+    }
+
     rc = spdk_bdev_create_bs_dev_ext(opts->base_bdev_name, ubi_handle_base_bdev_event,
                                      NULL, &ubi_bdev->bs_dev);
     if (rc) {
