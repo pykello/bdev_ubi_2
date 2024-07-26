@@ -236,8 +236,8 @@ static void bs_dev_uring_copy(struct spdk_bs_dev *dev, struct spdk_io_channel *c
 
 static bool bs_dev_uring_is_degraded(struct spdk_bs_dev *dev) { return false; }
 
-struct spdk_bs_dev *bs_dev_uring_create(const char *filename, uint32_t blocklen,
-                                        bool directio) {
+struct spdk_bs_dev *bs_dev_uring_create(const char *filename, const char *snapshot_path,
+                                        uint32_t blocklen, bool directio) {
     struct bs_dev_uring *uring_dev = calloc(1, sizeof *uring_dev);
     if (uring_dev == NULL) {
         SPDK_ERRLOG("could not allocate uring_dev\n");

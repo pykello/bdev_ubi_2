@@ -24,6 +24,24 @@ struct bs_dev_delta {
     uint32_t cluster_size;
 };
 
+int ubi_read_cluster_map(const char *filename, uint64_t *cluster_map) {
+    int fd = open(filename, O_RDONLY);
+    if (fd < 0) {
+        SPDK_ERRLOG("could not open %s: %s\n", filename, strerror(errno));
+        return -1;
+    }
+
+    ssize_t n = read(fd, cluster_map, sizeof(cluster_map));
+    if (n < 0) {
+        SPDK_ERRLOG("could not read cluster_map: %s\n", strerror(errno));
+        close(fd);
+        return -1;
+    }
+
+    close(fd);
+    return 0;
+}
+
 int bs_dev_delta_poll(void *arg) {
     struct bs_dev_delta_io_channel *ch = arg;
     struct io_uring *ring = &ch->image_file_ring;

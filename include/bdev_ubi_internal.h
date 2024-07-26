@@ -103,8 +103,8 @@ int ubi_create_channel_cb(void *io_device, void *ctx_buf);
 void ubi_destroy_channel_cb(void *io_device, void *ctx_buf);
 
 /* spdk_bs_dev_uring.c */
-struct spdk_bs_dev *bs_dev_uring_create(const char *filename, uint32_t blocklen,
-                                        bool directio);
+struct spdk_bs_dev *bs_dev_uring_create(const char *filename, const char *snapshot_path,
+                                        uint32_t blocklen, bool directio);
 
 /* spdk_bs_dev_delta.c */
 struct spdk_bs_dev *bs_dev_delta_create(const char *filename, uint64_t blockcnt,
@@ -114,5 +114,7 @@ struct spdk_bs_dev *bs_dev_delta_create(const char *filename, uint64_t blockcnt,
 /* macros */
 #define UBI_ERRLOG(ubi_bdev, format, ...)                                                \
     SPDK_ERRLOG("[%s] " format, ubi_bdev->bdev.name __VA_OPT__(, ) __VA_ARGS__)
+
+int ubi_read_cluster_map(const char *filename, uint64_t *cluster_map);
 
 #endif
