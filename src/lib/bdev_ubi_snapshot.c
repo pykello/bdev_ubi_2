@@ -1,6 +1,5 @@
 #include "bdev_ubi_internal.h"
 
-#include "/home/hadi/projects/spdk/lib/blob/blobstore.h"
 #include "spdk/blob.h"
 #include "spdk/likely.h"
 #include "spdk/log.h"
