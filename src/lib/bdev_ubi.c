@@ -74,9 +74,10 @@ static int ubi_esnap_dev_create(void *bs_ctx, void *blob_ctx, struct spdk_blob *
                                 struct spdk_bs_dev **bs_dev) {
     SPDK_WARNLOG("esnap_dev_create\n");
     struct ubi_bdev *ubi_bdev = bs_ctx;
-    uint32_t cluster_size = spdk_bs_get_cluster_size(ubi_bdev->blobstore) / ubi_bdev->bdev.blocklen;
-    *bs_dev = bs_dev_uring_create(ubi_bdev->image_path, ubi_bdev->snapshot_path,
-                                  ubi_bdev->bdev.blocklen, cluster_size, ubi_bdev->directio);
+    uint32_t cluster_size = spdk_bs_get_cluster_size(ubi_bdev->blobstore);
+    *bs_dev =
+        bs_dev_uring_create(ubi_bdev->image_path, ubi_bdev->snapshot_path,
+                            ubi_bdev->bdev.blocklen, cluster_size, ubi_bdev->directio);
     return 0;
 }
 

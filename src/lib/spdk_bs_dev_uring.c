@@ -20,7 +20,9 @@ struct bs_dev_uring {
     char snapshot_path[1024];
     uint64_t cluster_map[MAX_CLUSTERS];
     bool directio;
-    uint64_t cluster_size;
+    uint64_t lba_to_cluster_shift;
+    uint64_t lba_offset_mask;
+    uint64_t lba_to_addr_shift;
 };
 
 int bs_dev_uring_poll(void *arg) {
@@ -70,7 +72,8 @@ static int bs_dev_uring_create_channel_cb(void *io_device, void *ctx_buf) {
         SPDK_WARNLOG("Opening snapshot: %s\n", uring_dev->snapshot_path);
         ch->snapshot_file_fd = open(uring_dev->snapshot_path, open_flags);
         if (ch->snapshot_file_fd < 0) {
-            SPDK_ERRLOG("could not open %s: %s\n", uring_dev->snapshot_path, strerror(errno));
+            SPDK_ERRLOG("could not open %s: %s\n", uring_dev->snapshot_path,
+                        strerror(errno));
             close(ch->image_file_fd);
             free(ch);
             return -1;
@@ -122,16 +125,15 @@ static void bs_dev_uring_destroy(struct spdk_bs_dev *dev) {
 
 void set_io_opts(struct bs_dev_uring *uring_dev, struct bs_dev_uring_io_channel *ch,
                  uint64_t lba, int *fd, uint64_t *offset) {
-    uint64_t blocklen = uring_dev->base.blocklen;
-    if (uring_dev->cluster_map[lba / uring_dev->cluster_size] == 0) {
+    uint32_t cluster_id = lba >> uring_dev->lba_to_cluster_shift;
+    if (uring_dev->cluster_map[cluster_id] == 0) {
         *fd = ch->image_file_fd;
-        *offset = lba * blocklen;
+        *offset = (lba << uring_dev->lba_to_addr_shift);
     } else {
         *fd = ch->snapshot_file_fd;
-        uint64_t cluster_id = lba / uring_dev->cluster_size;
         uint64_t cluster_start = uring_dev->cluster_map[cluster_id];
-        uint64_t lba_offset = lba % uring_dev->cluster_size;
-        *offset = cluster_start + lba_offset * blocklen;
+        uint64_t lba_offset = (lba & uring_dev->lba_offset_mask);
+        *offset = cluster_start + (lba_offset << uring_dev->lba_to_addr_shift);
     }
 }
 
@@ -249,7 +251,7 @@ static bool bs_dev_uring_is_range_valid(struct spdk_bs_dev *dev, uint64_t lba,
                                         uint64_t lba_count) {
     struct bs_dev_uring *uring_dev = (struct bs_dev_uring *)dev;
     if (lba >= uring_dev->base.blockcnt) {
-        uint64_t cluster = lba / uring_dev->cluster_size;
+        uint64_t cluster = lba >> uring_dev->lba_to_cluster_shift;
         if (uring_dev->cluster_map[cluster] != 0) {
             SPDK_ERRLOG("Non-zero cluster-map: %lu\n", cluster);
             return false;
@@ -286,7 +288,8 @@ static void bs_dev_uring_copy(struct spdk_bs_dev *dev, struct spdk_io_channel *c
 static bool bs_dev_uring_is_degraded(struct spdk_bs_dev *dev) { return false; }
 
 struct spdk_bs_dev *bs_dev_uring_create(const char *filename, const char *snapshot_path,
-                                        uint32_t blocklen, uint32_t cluster_size, bool directio) {
+                                        uint32_t blocklen, uint32_t cluster_size,
+                                        bool directio) {
     struct bs_dev_uring *uring_dev = calloc(1, sizeof *uring_dev);
     if (uring_dev == NULL) {
         SPDK_ERRLOG("could not allocate uring_dev\n");
@@ -300,8 +303,9 @@ struct spdk_bs_dev *bs_dev_uring_create(const char *filename, const char *snapsh
         return NULL;
     }
 
-    int ret = (snapshot_path && snapshot_path[0]) ?
-        ubi_read_cluster_map(snapshot_path, uring_dev->cluster_map) : 0;
+    int ret = (snapshot_path && snapshot_path[0])
+                  ? ubi_read_cluster_map(snapshot_path, uring_dev->cluster_map)
+                  : 0;
     if (ret != 0) {
         SPDK_ERRLOG("could not read cluster map\n");
         free(uring_dev);
@@ -311,7 +315,9 @@ struct spdk_bs_dev *bs_dev_uring_create(const char *filename, const char *snapsh
     uring_dev->base.blockcnt = statBuffer.st_size / blocklen;
     uring_dev->base.blocklen = blocklen;
 
-    uring_dev->cluster_size = cluster_size;
+    uring_dev->lba_to_cluster_shift = spdk_u64log2(cluster_size / blocklen);
+    uring_dev->lba_to_addr_shift = spdk_u64log2(blocklen);
+    uring_dev->lba_offset_mask = (1 << uring_dev->lba_to_cluster_shift) - 1;
 
     strcpy(uring_dev->filename, filename);
     strcpy(uring_dev->snapshot_path, snapshot_path);
@@ -335,7 +341,6 @@ struct spdk_bs_dev *bs_dev_uring_create(const char *filename, const char *snapsh
     dev->translate_lba = bs_dev_uring_translate_lba;
     dev->copy = bs_dev_uring_copy;
     dev->is_degraded = bs_dev_uring_is_degraded;
-
 
     SPDK_WARNLOG("registering uring_dev: %p\n", dev);
 

@@ -225,10 +225,12 @@ static void bs_dev_delta_write(struct spdk_bs_dev *dev, struct spdk_io_channel *
         }
     }
 
-    SPDK_ERRLOG("write lba=%lu lba_count=%u, len: %lu, all_zero=%d, pos=%lu, first_8_bytes=0x%lx\n", lba, lba_count,
-                size, all_zero, pos, *(uint64_t *)payload);
+    SPDK_ERRLOG("write lba=%lu lba_count=%u, len: %lu, all_zero=%d, pos=%lu, "
+                "first_8_bytes=0x%lx\n",
+                lba, lba_count, size, all_zero, pos, *(uint64_t *)payload);
 
-    // SPDK_ERRLOG("Setting cluster_map[%lu] = %lu\n", lba / delta_dev->cluster_size, pos);
+    // SPDK_ERRLOG("Setting cluster_map[%lu] = %lu\n", lba / delta_dev->cluster_size,
+    // pos);
 
     int ret = write(ch->delta_file_fd, payload, size);
     if (ret < 0) {
