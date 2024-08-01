@@ -9,20 +9,23 @@
 
 struct bs_dev_uring_io_channel {
     int image_file_fd;
-    struct io_uring image_file_ring;
+    int snapshot_file_fd;
+    struct io_uring file_io_ring;
     struct spdk_poller *poller;
 };
 
 struct bs_dev_uring {
     struct spdk_bs_dev base;
     char filename[1024];
-    uint64_t cluster_map[1024 * 1024];
+    char snapshot_path[1024];
+    uint64_t cluster_map[MAX_CLUSTERS];
     bool directio;
+    uint64_t cluster_size;
 };
 
 int bs_dev_uring_poll(void *arg) {
     struct bs_dev_uring_io_channel *ch = arg;
-    struct io_uring *ring = &ch->image_file_ring;
+    struct io_uring *ring = &ch->file_io_ring;
 
     struct io_uring_cqe *cqe[64];
 
@@ -63,12 +66,28 @@ static int bs_dev_uring_create_channel_cb(void *io_device, void *ctx_buf) {
         return -1;
     }
 
+    if (uring_dev->snapshot_path[0]) {
+        SPDK_WARNLOG("Opening snapshot: %s\n", uring_dev->snapshot_path);
+        ch->snapshot_file_fd = open(uring_dev->snapshot_path, open_flags);
+        if (ch->snapshot_file_fd < 0) {
+            SPDK_ERRLOG("could not open %s: %s\n", uring_dev->snapshot_path, strerror(errno));
+            close(ch->image_file_fd);
+            free(ch);
+            return -1;
+        }
+    } else {
+        ch->snapshot_file_fd = -1;
+    }
+
     struct io_uring_params io_uring_params;
     memset(&io_uring_params, 0, sizeof(io_uring_params));
-    int rc = io_uring_queue_init(UBI_URING_QUEUE_SIZE, &ch->image_file_ring, 0);
+    int rc = io_uring_queue_init(UBI_URING_QUEUE_SIZE, &ch->file_io_ring, 0);
     if (rc != 0) {
         SPDK_ERRLOG("Unable to setup io_uring: %s\n", strerror(-rc));
         close(ch->image_file_fd);
+        if (ch->snapshot_file_fd >= 0) {
+            close(ch->snapshot_file_fd);
+        }
         free(ch);
         return -1;
     }
@@ -80,7 +99,7 @@ static int bs_dev_uring_create_channel_cb(void *io_device, void *ctx_buf) {
 
 static void bs_dev_uring_destroy_channel_cb(void *io_device, void *ctx_buf) {
     struct bs_dev_uring_io_channel *ch = ctx_buf;
-    io_uring_queue_exit(&ch->image_file_ring);
+    io_uring_queue_exit(&ch->file_io_ring);
     close(ch->image_file_fd);
     spdk_poller_unregister(&ch->poller);
 }
@@ -101,20 +120,39 @@ static void bs_dev_uring_destroy(struct spdk_bs_dev *dev) {
     // TODO: free anything?
 }
 
+void set_io_opts(struct bs_dev_uring *uring_dev, struct bs_dev_uring_io_channel *ch,
+                 uint64_t lba, int *fd, uint64_t *offset) {
+    uint64_t blocklen = uring_dev->base.blocklen;
+    if (uring_dev->cluster_map[lba / uring_dev->cluster_size] == 0) {
+        *fd = ch->image_file_fd;
+        *offset = lba * blocklen;
+    } else {
+        *fd = ch->snapshot_file_fd;
+        uint64_t cluster_id = lba / uring_dev->cluster_size;
+        uint64_t cluster_start = uring_dev->cluster_map[cluster_id];
+        uint64_t lba_offset = lba % uring_dev->cluster_size;
+        *offset = cluster_start + lba_offset * blocklen;
+    }
+}
+
 static void bs_dev_uring_read(struct spdk_bs_dev *dev, struct spdk_io_channel *channel,
                               void *payload, uint64_t lba, uint32_t lba_count,
                               struct spdk_bs_dev_cb_args *cb_args) {
     struct bs_dev_uring_io_channel *ch = spdk_io_channel_get_ctx(channel);
-    struct io_uring *ring = &ch->image_file_ring;
+    struct bs_dev_uring *uring_dev = (struct bs_dev_uring *)dev;
+    struct io_uring *ring = &ch->file_io_ring;
+    int fd;
+    uint64_t offset;
 
     if (lba >= dev->blockcnt) {
         cb_args->cb_fn(cb_args->channel, cb_args->cb_arg, 0);
         return;
     }
 
+    set_io_opts(uring_dev, ch, lba, &fd, &offset);
+
     struct io_uring_sqe *sqe = io_uring_get_sqe(ring);
-    io_uring_prep_read(sqe, ch->image_file_fd, payload, lba_count * dev->blocklen,
-                       lba * dev->blocklen);
+    io_uring_prep_read(sqe, fd, payload, lba_count * dev->blocklen, offset);
     io_uring_sqe_set_data(sqe, cb_args);
 
     int ret = io_uring_submit(ring);
@@ -128,15 +166,20 @@ static void bs_dev_uring_readv(struct spdk_bs_dev *dev, struct spdk_io_channel *
                                struct iovec *iov, int iovcnt, uint64_t lba,
                                uint32_t lba_count, struct spdk_bs_dev_cb_args *cb_args) {
     struct bs_dev_uring_io_channel *ch = spdk_io_channel_get_ctx(channel);
-    struct io_uring *ring = &ch->image_file_ring;
+    struct bs_dev_uring *uring_dev = (struct bs_dev_uring *)dev;
+    struct io_uring *ring = &ch->file_io_ring;
+    int fd;
+    uint64_t offset;
 
     if (lba >= dev->blockcnt) {
         cb_args->cb_fn(cb_args->channel, cb_args->cb_arg, 0);
         return;
     }
 
+    set_io_opts(uring_dev, ch, lba, &fd, &offset);
+
     struct io_uring_sqe *sqe = io_uring_get_sqe(ring);
-    io_uring_prep_readv(sqe, ch->image_file_fd, iov, iovcnt, lba * dev->blocklen);
+    io_uring_prep_readv(sqe, fd, iov, iovcnt, offset);
     io_uring_sqe_set_data(sqe, cb_args);
 
     int ret = io_uring_submit(ring);
@@ -206,6 +249,11 @@ static bool bs_dev_uring_is_range_valid(struct spdk_bs_dev *dev, uint64_t lba,
                                         uint64_t lba_count) {
     struct bs_dev_uring *uring_dev = (struct bs_dev_uring *)dev;
     if (lba >= uring_dev->base.blockcnt) {
+        uint64_t cluster = lba / uring_dev->cluster_size;
+        if (uring_dev->cluster_map[cluster] != 0) {
+            SPDK_ERRLOG("Non-zero cluster-map: %lu\n", cluster);
+            return false;
+        }
         return false;
     } else if (lba + lba_count > uring_dev->base.blockcnt) {
         SPDK_ERRLOG("Entire range must be within the bs_dev bounds for CoW.\n"
@@ -238,7 +286,7 @@ static void bs_dev_uring_copy(struct spdk_bs_dev *dev, struct spdk_io_channel *c
 static bool bs_dev_uring_is_degraded(struct spdk_bs_dev *dev) { return false; }
 
 struct spdk_bs_dev *bs_dev_uring_create(const char *filename, const char *snapshot_path,
-                                        uint32_t blocklen, bool directio) {
+                                        uint32_t blocklen, uint32_t cluster_size, bool directio) {
     struct bs_dev_uring *uring_dev = calloc(1, sizeof *uring_dev);
     if (uring_dev == NULL) {
         SPDK_ERRLOG("could not allocate uring_dev\n");
@@ -253,7 +301,7 @@ struct spdk_bs_dev *bs_dev_uring_create(const char *filename, const char *snapsh
     }
 
     int ret = (snapshot_path && snapshot_path[0]) ?
-        ubi_read_cluster_map(filename, uring_dev->cluster_map) : 0;
+        ubi_read_cluster_map(snapshot_path, uring_dev->cluster_map) : 0;
     if (ret != 0) {
         SPDK_ERRLOG("could not read cluster map\n");
         free(uring_dev);
@@ -263,7 +311,10 @@ struct spdk_bs_dev *bs_dev_uring_create(const char *filename, const char *snapsh
     uring_dev->base.blockcnt = statBuffer.st_size / blocklen;
     uring_dev->base.blocklen = blocklen;
 
+    uring_dev->cluster_size = cluster_size;
+
     strcpy(uring_dev->filename, filename);
+    strcpy(uring_dev->snapshot_path, snapshot_path);
     uring_dev->directio = directio;
     struct spdk_bs_dev *dev = &uring_dev->base;
     dev->create_channel = bs_dev_uring_create_channel;

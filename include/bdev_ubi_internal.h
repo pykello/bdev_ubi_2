@@ -16,6 +16,7 @@
 #include <liburing.h>
 
 #define UBI_PATH_LEN 1024
+#define MAX_CLUSTERS 1024 * 1024 * 8
 
 /*
  * Block device's state. ubi_create creates and sets up a ubi_bdev.
@@ -104,7 +105,7 @@ void ubi_destroy_channel_cb(void *io_device, void *ctx_buf);
 
 /* spdk_bs_dev_uring.c */
 struct spdk_bs_dev *bs_dev_uring_create(const char *filename, const char *snapshot_path,
-                                        uint32_t blocklen, bool directio);
+                                        uint32_t blocklen, uint32_t cluster_size, bool directio);
 
 /* spdk_bs_dev_delta.c */
 struct spdk_bs_dev *bs_dev_delta_create(const char *filename, uint64_t blockcnt,

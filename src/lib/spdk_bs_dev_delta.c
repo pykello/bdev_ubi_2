@@ -12,7 +12,7 @@ struct bs_dev_delta_io_channel {
     struct io_uring image_file_ring;
     struct spdk_poller *poller;
 
-    uint64_t cluster_map[1024 * 1024];
+    uint64_t cluster_map[MAX_CLUSTERS];
     bool initialized;
 };
 
@@ -32,7 +32,9 @@ int ubi_read_cluster_map(const char *filename, uint64_t *cluster_map) {
         return -1;
     }
 
-    ssize_t n = read(fd, cluster_map, sizeof(cluster_map));
+    ssize_t n = read(fd, cluster_map, sizeof(uint64_t) * MAX_CLUSTERS);
+    SPDK_ERRLOG("read %lu bytes\n", n);
+    SPDK_ERRLOG("first item is: %lu\n", cluster_map[0]);
     if (n < 0) {
         SPDK_ERRLOG("could not read cluster_map: %s\n", strerror(errno));
         close(fd);
@@ -75,6 +77,8 @@ int bs_dev_delta_poll(void *arg) {
 static int bs_dev_delta_create_channel_cb(void *io_device, void *ctx_buf) {
     struct bs_dev_delta *delta_dev = io_device;
     struct bs_dev_delta_io_channel *ch = ctx_buf;
+
+    SPDK_ERRLOG("opening delta device %s\n", delta_dev->filename);
 
     if (delta_dev->direction == BS_DEV_DELTA_WRITE) {
         ch->delta_file_fd = open(delta_dev->filename, O_RDWR | O_CREAT, 0644);
@@ -133,12 +137,16 @@ static void bs_dev_delta_destroy_channel_cb(void *io_device, void *ctx_buf) {
     struct bs_dev_delta *delta_dev = io_device;
 
     // write cluster_map using linux write
+    // SPDK_ERRLOG("destroying channel\n");
     if (delta_dev->direction == BS_DEV_DELTA_WRITE) {
+        // SPDK_ERRLOG("writing cluster_map, first item is: %lu\n", ch->cluster_map[0]);
         int ret = lseek(ch->delta_file_fd, 0, SEEK_SET);
         if (ret < 0) {
             SPDK_ERRLOG("could not seek to beginning of file: %s\n", strerror(errno));
         }
+        lseek(ch->delta_file_fd, 0, SEEK_CUR);
         ssize_t n = write(ch->delta_file_fd, ch->cluster_map, sizeof(ch->cluster_map));
+        // SPDK_ERRLOG("wrote %lu bytes\n", n);
         if (n < 0) {
             SPDK_ERRLOG("could not write cluster_map: %s\n", strerror(errno));
         }
@@ -167,7 +175,6 @@ static void bs_dev_delta_read(struct spdk_bs_dev *dev, struct spdk_io_channel *c
                               void *payload, uint64_t lba, uint32_t lba_count,
                               struct spdk_bs_dev_cb_args *cb_args) {
     SPDK_ERRLOG("read lba=%lu lba_count=%u\n", lba, lba_count);
-    // TODO
     cb_args->cb_fn(cb_args->channel, cb_args->cb_arg, -ENOTSUP);
 }
 
@@ -175,18 +182,6 @@ static void bs_dev_delta_readv(struct spdk_bs_dev *dev, struct spdk_io_channel *
                                struct iovec *iov, int iovcnt, uint64_t lba,
                                uint32_t lba_count, struct spdk_bs_dev_cb_args *cb_args) {
     SPDK_ERRLOG("readv lba=%lu lba_count=%u\n", lba, lba_count);
-    struct bs_dev_delta_io_channel *ch = spdk_io_channel_get_ctx(channel);
-    // check if the cluster is in the cluster_map
-    // if not, read from the base device
-    if (ch->cluster_map[lba] == 0) {
-        // read from base device
-        // TODO
-        cb_args->cb_fn(cb_args->channel, cb_args->cb_arg, -ENOTSUP);
-    } else {
-        // read from delta device
-        // TODO
-        cb_args->cb_fn(cb_args->channel, cb_args->cb_arg, -ENOTSUP);
-    }
     cb_args->cb_fn(cb_args->channel, cb_args->cb_arg, -ENOTSUP);
 }
 
@@ -203,8 +198,37 @@ static void bs_dev_delta_write(struct spdk_bs_dev *dev, struct spdk_io_channel *
                                void *payload, uint64_t lba, uint32_t lba_count,
                                struct spdk_bs_dev_cb_args *cb_args) {
     struct bs_dev_delta_io_channel *ch = spdk_io_channel_get_ctx(channel);
+    struct bs_dev_delta *delta_dev = SPDK_CONTAINEROF(dev, struct bs_dev_delta, base);
     uint64_t size = dev->blocklen * lba_count;
-    SPDK_ERRLOG("write lba=%lu lba_count=%u, size=%lu\n", lba, lba_count, size);
+
+    // get file current position
+    off_t pos = lseek(ch->delta_file_fd, 0, SEEK_CUR);
+    if (pos < 0) {
+        SPDK_ERRLOG("could not get current position: %s\n", strerror(errno));
+        cb_args->cb_fn(cb_args->channel, cb_args->cb_arg, -EIO);
+        return;
+    }
+
+    if (lba % delta_dev->cluster_size != 0) {
+        SPDK_ERRLOG("lba must be a multiple of cluster_size\n");
+        cb_args->cb_fn(cb_args->channel, cb_args->cb_arg, -EINVAL);
+        return;
+    }
+
+    ch->cluster_map[lba / delta_dev->cluster_size] = pos;
+
+    bool all_zero = true;
+    for (int i = 0; i < size; i++) {
+        if (((char *)payload)[i] != 0) {
+            all_zero = false;
+            break;
+        }
+    }
+
+    SPDK_ERRLOG("write lba=%lu lba_count=%u, len: %lu, all_zero=%d, pos=%lu, first_8_bytes=0x%lx\n", lba, lba_count,
+                size, all_zero, pos, *(uint64_t *)payload);
+
+    // SPDK_ERRLOG("Setting cluster_map[%lu] = %lu\n", lba / delta_dev->cluster_size, pos);
 
     int ret = write(ch->delta_file_fd, payload, size);
     if (ret < 0) {
@@ -212,14 +236,14 @@ static void bs_dev_delta_write(struct spdk_bs_dev *dev, struct spdk_io_channel *
         cb_args->cb_fn(cb_args->channel, cb_args->cb_arg, -EIO);
         return;
     }
-    // TODO
+
     cb_args->cb_fn(cb_args->channel, cb_args->cb_arg, 0);
 }
 
 static void bs_dev_delta_writev(struct spdk_bs_dev *dev, struct spdk_io_channel *channel,
                                 struct iovec *iov, int iovcnt, uint64_t lba,
                                 uint32_t lba_count, struct spdk_bs_dev_cb_args *cb_args) {
-    SPDK_ERRLOG("writev lba=%lu lba_count=%u, len: %lu\n", lba, lba_count,
+    SPDK_ERRLOG("XXX writev lba=%lu lba_count=%u, len: %lu\n", lba, lba_count,
                 iov[0].iov_len);
 
     // TODO
@@ -231,7 +255,7 @@ static void bs_dev_delta_writev_ext(struct spdk_bs_dev *dev,
                                     int iovcnt, uint64_t lba, uint32_t lba_count,
                                     struct spdk_bs_dev_cb_args *cb_args,
                                     struct spdk_blob_ext_io_opts *ext_io_opts) {
-    SPDK_ERRLOG("writev_ext lba=%lu lba_count=%u\n", lba, lba_count);
+    SPDK_ERRLOG("XXX writev_ext lba=%lu lba_count=%u\n", lba, lba_count);
     // TODO
     cb_args->cb_fn(cb_args->channel, cb_args->cb_arg, 0);
 }
