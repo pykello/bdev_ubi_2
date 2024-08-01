@@ -77,8 +77,9 @@ jobs:
           cd $INSTALL_PREFIX/..
           tar --create --gzip --file=$TARBALL_PATH spdk
       - uses: ncipollo/release-action@v1
-        if: github.event_name == 'workflow_dispatch' && github.ref_type == 'tag'
+        if: github.event_name == 'workflow_dispatch'
         with:
           artifacts: "${{ env.TARBALL_PATH }}"
           body: "Release ${{ github.ref_name }}"
           allowUpdates: true
+          tag: "${{ github.ref_name }}-${{ matrix.platform }}"
