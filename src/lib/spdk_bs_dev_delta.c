@@ -325,7 +325,7 @@ struct spdk_bs_dev *bs_dev_delta_create(const char *filename, uint64_t blockcnt,
 
     delta_dev->base.blockcnt = blockcnt;
     delta_dev->base.blocklen = blocklen;
-    delta_dev->cluster_size = cluster_size;
+    delta_dev->cluster_size = cluster_size / blocklen;
     delta_dev->direction = direction;
 
     SPDK_WARNLOG("creating delta device. filename=%s blockcnt=%lu blocklen=%u "

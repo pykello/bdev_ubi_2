@@ -69,9 +69,11 @@ static void ubi_start_snapshot(void *cb_arg, int bserrno) {
     ubi_bdev->snapshot_status.total_clusters =
         spdk_bs_total_data_cluster_count(ubi_bdev->blobstore);
 
+    uint64_t cluster_size = spdk_bs_get_cluster_size(ubi_bdev->blobstore);
+
     ctx->shallow_copy_bs_dev =
         bs_dev_delta_create(ctx->path, ubi_bdev->bdev.blockcnt, ubi_bdev->bdev.blocklen,
-                            2048, BS_DEV_DELTA_WRITE);
+                            cluster_size, BS_DEV_DELTA_WRITE);
 
     SPDK_WARNLOG("starting shallow copy for %s, blobid: %lu\n", ubi_bdev->bdev.name,
                  ctx->clone_blobid);
