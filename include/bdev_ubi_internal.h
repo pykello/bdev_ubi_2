@@ -16,7 +16,7 @@
 #include <liburing.h>
 
 #define UBI_PATH_LEN 1024
-#define MAX_CLUSTERS 1024 * 1024 * 8
+#define MAX_CLUSTERS 1024 * 1024 * 64
 
 /*
  * Block device's state. ubi_create creates and sets up a ubi_bdev.

@@ -254,7 +254,7 @@ static bool bs_dev_uring_is_range_valid(struct spdk_bs_dev *dev, uint64_t lba,
         uint64_t cluster = lba >> uring_dev->lba_to_cluster_shift;
         if (uring_dev->cluster_map[cluster] != 0) {
             SPDK_ERRLOG("Non-zero cluster-map: %lu\n", cluster);
-            return false;
+            return true;
         }
         return false;
     } else if (lba + lba_count > uring_dev->base.blockcnt) {
