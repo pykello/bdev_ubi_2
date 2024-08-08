@@ -427,6 +427,9 @@ static bool ubi_io_type_supported(void *ctx, enum spdk_bdev_io_type io_type) {
 
 static void ubi_blob_io_complete(void *cb_arg, int bserrno) {
     struct spdk_bdev_io *bdev_io = cb_arg;
+    if (bserrno) {
+        SPDK_ERRLOG("I/O error: %s, io_type: %d\n", spdk_strerror(-bserrno), bdev_io->type);
+    }
     spdk_bdev_io_complete(bdev_io, bserrno ? SPDK_BDEV_IO_STATUS_FAILED
                                            : SPDK_BDEV_IO_STATUS_SUCCESS);
 }
@@ -456,12 +459,7 @@ static void ubi_submit_request(struct spdk_io_channel *_ch,
                             offset, length, ubi_blob_io_complete, bdev_io);
         break;
     case SPDK_BDEV_IO_TYPE_FLUSH:
-        if (ubi_bdev->no_sync) {
-            spdk_bdev_io_complete(bdev_io, SPDK_BDEV_IO_STATUS_SUCCESS);
-        } else {
-            spdk_blob_sync_md(blob, ubi_blob_io_complete, bdev_io);
-            // TODO: is this enough?
-        }
+        spdk_bdev_io_complete(bdev_io, SPDK_BDEV_IO_STATUS_SUCCESS);
         break;
     default:
         UBI_ERRLOG(ubi_bdev, "Unsupported I/O type %d\n", bdev_io->type);
