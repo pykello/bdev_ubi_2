@@ -428,8 +428,10 @@ static bool ubi_io_type_supported(void *ctx, enum spdk_bdev_io_type io_type) {
 static void ubi_blob_io_complete(void *cb_arg, int bserrno) {
     struct spdk_bdev_io *bdev_io = cb_arg;
     if (bserrno) {
-        SPDK_ERRLOG("I/O error: %s, io_type: %d\n", spdk_strerror(-bserrno),
-                    bdev_io->type);
+        SPDK_ERRLOG(
+            "I/O error: %s, io_type: %d, offset_blocks: 0x%lu, size_blocks: %lu\n",
+            spdk_strerror(-bserrno), bdev_io->type, bdev_io->u.bdev.offset_blocks,
+            bdev_io->u.bdev.num_blocks);
     }
     spdk_bdev_io_complete(bdev_io, bserrno ? SPDK_BDEV_IO_STATUS_FAILED
                                            : SPDK_BDEV_IO_STATUS_SUCCESS);
