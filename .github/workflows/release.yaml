@@ -37,7 +37,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: spdk/spdk
-          ref: refs/tags/v24.05
+          ref: 29119cdfbccadfa4b4b8242645bdc6ef1e7a4a96
           fetch-depth: 0
           submodules: 'recursive'
           path: 'spdk'
