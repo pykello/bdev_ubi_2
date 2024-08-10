@@ -1,0 +1,8 @@
+/root/bdev_ubi_2/bin/vhost_ubi \
+        -S /var/storage/vhost \
+        --huge-dir /home/spdk/hugepages.v23.09.ubi.0.3 \
+        --iova-mode va \
+        --rpc-socket /home/spdk/spdk-v23.09-ubi-0.3.sock \
+        --cpumask [0,1,2,3] \
+        --disable-cpumask-locks \
+        --config /home/spdk/spdk-v23.09-ubi-0.3.conf
