@@ -5,7 +5,7 @@
 #include "spdk/thread.h"
 #include <liburing.h>
 
-#define UBI_URING_QUEUE_SIZE 128
+#define UBI_URING_QUEUE_SIZE 4096
 
 struct bs_dev_uring_io_channel {
     int image_file_fd;

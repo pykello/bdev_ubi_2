@@ -252,6 +252,7 @@ void bdev_ubi_create(const struct spdk_ubi_bdev_opts *opts,
     spdk_bs_opts_init(&context->bs_opts, sizeof(context->bs_opts));
     context->bs_opts.esnap_bs_dev_create = ubi_esnap_dev_create;
     context->bs_opts.esnap_ctx = ubi_bdev;
+    context->bs_opts.max_channel_ops = 20000;
 
     if (opts->format_bdev) {
         spdk_bs_init(ubi_bdev->bs_dev, &context->bs_opts, ubi_bs_init_complete, context);
