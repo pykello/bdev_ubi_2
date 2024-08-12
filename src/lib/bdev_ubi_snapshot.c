@@ -60,8 +60,8 @@ static void ubi_start_snapshot(void *cb_arg, int bserrno) {
     if (bserrno != 0) {
         SPDK_ERRLOG("Failed to close clone for %s: %d\n", ubi_bdev->bdev.name, bserrno);
         ubi_bdev->snapshot_status.result = bserrno;
-        cleanup_snapshot_context(ctx);
         ctx->cb_fn(ctx->cb_arg, bserrno);
+        cleanup_snapshot_context(ctx);
         return;
     }
 
@@ -84,6 +84,24 @@ static void ubi_start_snapshot(void *cb_arg, int bserrno) {
     ctx->cb_fn(ctx->cb_arg, ret);
 }
 
+static void ubi_decouple_parent_cb(void *cb_arg, int bserrno) {
+    struct snapshot_context *ctx = cb_arg;
+    struct ubi_bdev *ubi_bdev = ctx->ubi_bdev;
+
+    if (bserrno != 0) {
+        SPDK_ERRLOG("Failed to decouple parent for %s: %d\n", ubi_bdev->bdev.name,
+                    bserrno);
+        ubi_bdev->snapshot_status.result = bserrno;
+        ctx->cb_fn(ctx->cb_arg, bserrno);
+        cleanup_snapshot_context(ctx);
+        return;
+    }
+
+    SPDK_WARNLOG("Parent decoupled for %s\n", ubi_bdev->bdev.name);
+
+    ubi_start_snapshot(ctx, 0);
+}
+
 static void ubi_close_clone_cb(void *cb_arg, int bserrno) {
     struct snapshot_context *ctx = cb_arg;
     struct ubi_bdev *ubi_bdev = ctx->ubi_bdev;
@@ -91,15 +109,15 @@ static void ubi_close_clone_cb(void *cb_arg, int bserrno) {
     if (bserrno != 0) {
         SPDK_ERRLOG("Failed to close clone for %s: %d\n", ubi_bdev->bdev.name, bserrno);
         ubi_bdev->snapshot_status.result = bserrno;
-        cleanup_snapshot_context(ctx);
         ctx->cb_fn(ctx->cb_arg, bserrno);
+        cleanup_snapshot_context(ctx);
         return;
     }
 
     SPDK_WARNLOG("Clone closed for %s\n", ubi_bdev->bdev.name);
 
     spdk_bs_blob_decouple_parent(ubi_bdev->blobstore, ctx->ch, ctx->clone_blobid,
-                                 ubi_start_snapshot, ctx);
+                                 ubi_decouple_parent_cb, ctx);
 }
 
 static void ubi_open_clone_cb(void *cb_arg, struct spdk_blob *blob, int bserrno) {
@@ -109,8 +127,8 @@ static void ubi_open_clone_cb(void *cb_arg, struct spdk_blob *blob, int bserrno)
     if (bserrno != 0) {
         SPDK_ERRLOG("Failed to open clone for %s: %d\n", ubi_bdev->bdev.name, bserrno);
         ubi_bdev->snapshot_status.result = bserrno;
-        cleanup_snapshot_context(ctx);
         ctx->cb_fn(ctx->cb_arg, bserrno);
+        cleanup_snapshot_context(ctx);
         return;
     }
 
@@ -121,8 +139,8 @@ static void ubi_open_clone_cb(void *cb_arg, struct spdk_blob *blob, int bserrno)
         SPDK_ERRLOG("Failed to set clone read-only for %s: %d\n", ubi_bdev->bdev.name,
                     ret);
         ubi_bdev->snapshot_status.result = ret;
-        cleanup_snapshot_context(ctx);
         ctx->cb_fn(ctx->cb_arg, ret);
+        cleanup_snapshot_context(ctx);
         return;
     }
 
@@ -136,8 +154,8 @@ static void ubi_clone_create_cb(void *cb_arg, spdk_blob_id blobid, int bserrno) 
     if (bserrno != 0) {
         SPDK_ERRLOG("Failed to create clone for %s: %d\n", ubi_bdev->bdev.name, bserrno);
         ubi_bdev->snapshot_status.result = bserrno;
-        cleanup_snapshot_context(ctx);
         ctx->cb_fn(ctx->cb_arg, bserrno);
+        cleanup_snapshot_context(ctx);
         return;
     }
 
@@ -158,12 +176,19 @@ static void ubi_snapshot_create_cb(void *cb_arg, spdk_blob_id blobid, int bserrn
         SPDK_ERRLOG("Failed to create snapshot for %s: %d\n", ubi_bdev->bdev.name,
                     bserrno);
         ubi_bdev->snapshot_status.result = bserrno;
-        cleanup_snapshot_context(ctx);
         ctx->cb_fn(ctx->cb_arg, bserrno);
+        cleanup_snapshot_context(ctx);
         return;
     }
 
     SPDK_WARNLOG("Snapshot created for %s, blobid: %lu \n", ubi_bdev->bdev.name, blobid);
+
+    if (ctx->path[0] == '\0') {
+        SPDK_WARNLOG("No path provided for snapshot\n");
+        ctx->cb_fn(ctx->cb_arg, 0);
+        cleanup_snapshot_context(ctx);
+        return;
+    }
 
     ctx->snapshot_blobid = blobid;
     ctx->ch = spdk_bs_alloc_io_channel(ubi_bdev->blobstore);

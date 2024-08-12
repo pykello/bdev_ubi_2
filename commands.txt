@@ -6,3 +6,54 @@
         --cpumask [0,1,2,3] \
         --disable-cpumask-locks \
         --config /home/spdk/spdk-v23.09-ubi-0.3.conf
+
+sudo fio --filename=./f --size=2GB --direct=1 --rw=randrw --bs=4k --ioengine=libaio \
+         --iodepth=256 --runtime=30 --numjobs=4 --time_based --group_reporting \
+         --name=iops-test-job --eta-newline=1
+
+sudo fio --filename=./f --size=2GB --direct=1 --rw=randread --bs=4k --ioengine=libaio \
+         --iodepth=256 --runtime=30 --numjobs=4 --time_based --group_reporting \
+         --name=iops-test-job --eta-newline=1
+
+sudo fio --filename=./f --size=2GB --direct=1 --rw=randwrite --bs=4k --ioengine=libaio \
+         --iodepth=256 --runtime=30 --numjobs=4 --time_based --group_reporting \
+         --name=iops-test-job --eta-newline=1
+
+socat - UNIX-CONNECT:/home/spdk/spdk-v23.09-ubi-0.3.sock < snapshot.json
+
+sudo fio --filename=./f --size=2GB --direct=1 --rw=randrw --bs=4k --ioengine=libaio \
+         --iodepth=256 --runtime=1200 --eta-interval=250ms \
+         --numjobs=4 --time_based --name=iops-test-job --eta-newline=1
+
+
+snapshot + shallow-copy
+
+Jobs: 4 (f=4): [m(4)][6.5%][r=211MiB/s,w=208MiB/s][r=54.0k,w=53.2k IOPS][eta 03m:06s]
+Jobs: 4 (f=4): [m(4)][7.0%][r=204MiB/s,w=211MiB/s][r=52.1k,w=54.0k IOPS][eta 03m:06s]
+Jobs: 4 (f=4): [m(4)][8.0%][r=209MiB/s,w=209MiB/s][r=53.5k,w=53.4k IOPS][eta 03m:04s]
+Jobs: 4 (f=4): [m(4)][8.5%][r=207MiB/s,w=209MiB/s][r=53.1k,w=53.6k IOPS][eta 03m:02s]
+Jobs: 4 (f=4): [m(4)][9.0%][r=2297KiB/s,w=2200KiB/s][r=574,w=550 IOPS][eta 03m:02s]
+Jobs: 4 (f=4): [m(4)][9.5%][r=4208KiB/s,w=3584KiB/s][r=1052,w=896 IOPS][eta 03m:01s]
+Jobs: 4 (f=4): [m(4)][10.5%][r=2746KiB/s,w=3244KiB/s][r=686,w=811 IOPS][eta 02m:59s]
+Jobs: 4 (f=4): [m(4)][11.0%][r=17.1MiB/s,w=17.8MiB/s][r=4376,w=4552 IOPS][eta 02m:58s]
+Jobs: 4 (f=4): [m(4)][11.5%][r=98.9MiB/s,w=98.1MiB/s][r=25.3k,w=25.1k IOPS][eta 02m:57s]
+Jobs: 4 (f=4): [m(4)][12.0%][r=34.3MiB/s,w=34.9MiB/s][r=8784,w=8940 IOPS][eta 02m:56s]
+Jobs: 4 (f=4): [m(4)][13.1%][r=34.7MiB/s,w=33.6MiB/s][r=8887,w=8606 IOPS][eta 02m:53s]
+Jobs: 4 (f=4): [m(4)][13.6%][r=35.1MiB/s,w=35.0MiB/s][r=8980,w=8972 IOPS][eta 02m:52s]
+Jobs: 4 (f=4): [m(4)][14.0%][r=34.7MiB/s,w=34.5MiB/s][r=8891,w=8819 IOPS][eta 02m:52s]
+Jobs: 4 (f=4): [m(4)][14.5%][r=183MiB/s,w=185MiB/s][r=46.8k,w=47.4k IOPS][eta 02m:51s]
+Jobs: 4 (f=4): [m(4)][15.5%][r=202MiB/s,w=200MiB/s][r=51.7k,w=51.2k IOPS][eta 02m:49s]
+Jobs: 4 (f=4): [m(4)][16.0%][r=195MiB/s,w=192MiB/s][r=50.0k,w=49.1k IOPS][eta 02m:48s]
+Jobs: 4 (f=4): [m(4)][16.5%][r=189MiB/s,w=188MiB/s][r=48.3k,w=48.1k IOPS][eta 02m:47s]
+Jobs: 4 (f=4): [m(4)][17.1%][r=193MiB/s,w=193MiB/s][r=49.3k,w=49.3k IOPS][eta 02m:45s]
+Jobs: 4 (f=4): [m(4)][18.0%][r=184MiB/s,w=183MiB/s][r=47.1k,w=46.9k IOPS][eta 02m:44s]
+Jobs: 4 (f=4): [m(4)][18.5%][r=194MiB/s,w=195MiB/s][r=49.8k,w=49.9k IOPS][eta 02m:43s]
+Jobs: 4 (f=4): [m(4)][19.0%][r=190MiB/s,w=189MiB/s][r=48.6k,w=48.5k IOPS][eta 02m:42s]
+Jobs: 4 (f=4): [m(4)][19.6%][r=155MiB/s,w=156MiB/s][r=39.6k,w=40.0k IOPS][eta 02m:40s]
+Jobs: 4 (f=4): [m(4)][20.5%][r=168MiB/s,w=170MiB/s][r=43.0k,w=43.6k IOPS][eta 02m:39s]
+Jobs: 4 (f=4): [m(4)][21.0%][r=208MiB/s,w=208MiB/s][r=53.3k,w=53.1k IOPS][eta 02m:38s]
+^Cbs: 4 (f=4): [m(4)][21.5%][r=207MiB/s,w=209MiB/s][r=53.0k,w=53.6k IOPS][eta 02m:37s]
+
+7G snapshot file
+
+snapshot + no shallow-copy
